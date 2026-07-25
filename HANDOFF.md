@@ -2,7 +2,83 @@
 
 > Bu belge tamamen bağlamsız yeni bir oturum için yazıldı. Oyun içeriği ve README
 > Türkçedir; bu belge teknik aktarım olduğu için İngilizce/Türkçe karışıktır.
-> Son güncelleme: 2026-07-25.
+> Son güncelleme: 2026-07-25 (Windows bring-up oturumu).
+
+---
+
+## 0. Session log — Windows bring-up (2026-07-25)
+
+Read this first if you are on Windows. Sections 1–7 below are the game/design
+handover and remain authoritative; this section only records how the prototype
+was brought up on a second platform. **No game code was changed.**
+
+### Task of this session
+
+The project's stated goal is **cross-platform: PC + Mac now, mobile later.** The
+prototype was authored and only ever run on macOS. This session's job was to make
+the exact same code **build and play on Windows** (dir `C:\Users\Elessar\Desktop\garaj`)
+without forking the code — i.e. prove the "portable by construction" claim.
+
+### What was completed
+
+- Repo cloned to `C:\Users\Elessar\Desktop\garaj` via the GitHub CLI (`gh`, already
+  authenticated as `ozcanr17`).
+- **Installed the .NET 10 SDK on Windows: `winget install --id Microsoft.DotNet.SDK.10`**
+  (got 10.0.302). This was the only missing piece — the machine had the `dotnet`
+  host and the .NET 6 *runtime* but **no SDK**, so `dotnet build` failed with
+  "No .NET SDKs were found".
+- Built clean on Windows: `0 Uyarı, 0 Hata` (identical to macOS).
+- Verified three ways:
+  1. `--balance 1000 7` — economy metrics match the targets in §6 (avg condition 54,
+     4.7 defects/car, ~30% masked, 6% time bombs, ~50% profitable). Sim layer is fine.
+  2. Interactive play with a fixed seed — title art, day loop, İLANLAR listing,
+     vehicle-detail screen (Teşhis / satıcıya soru / pazarlık) all render.
+  3. Turkish glyphs (Ş, İ, ğ, ç) and the box-drawing UI render correctly in the
+     Windows terminal — the `tr-TR` uppercase handling from §5 holds on Windows too.
+- **Zero source changes.** `Garaj.Core` + `Garaj.Console` are already portable .NET;
+  Windows was purely a toolchain-install exercise. This is the §4 "ports unchanged"
+  invariant confirmed on real hardware.
+
+### How to run on Windows
+
+Open a **new** PowerShell window (so the freshly-installed SDK is on PATH), then:
+
+```powershell
+cd C:\Users\Elessar\Desktop\garaj
+dotnet run --project src/Garaj.Console                       # oyna
+dotnet run --project src/Garaj.Console -- 12345              # sabit seed
+dotnet run --project src/Garaj.Console -- --balance 1000 7   # denge raporu
+```
+
+### Where we are stuck
+
+Nothing new is blocked. The prototype is now playable on **both** macOS and Windows.
+We are still stuck on the *same* human-judgement gate as §3: the user must play
+3–4 times and report whether opening the hood produces merak/heyecan/gerilim. That
+playtest can now happen on either OS. **Do not build more content before that answer.**
+
+### Next plan
+
+Unchanged from §4. Mobile (the eventual third platform) is **not** a console port —
+per §4.5 / §7 it comes via the Unity port, which absorbs `Garaj.Core` as-is and adds
+a render layer. Do not try to make the console UI run on mobile.
+
+### Pitfalls hit this session (Windows-specific)
+
+| Pitfall | What happened | Fix |
+|---|---|---|
+| `dotnet` present ≠ SDK present | The `dotnet` host and .NET 6 runtime existed, so `dotnet` "worked", but `dotnet build`/`--version` failed. | Always check `dotnet --list-sdks`. Install `Microsoft.DotNet.SDK.10` via winget. |
+| Stale PATH in an open shell | After the winget install, shells opened *before* it don't see the SDK on PATH. | Open a new terminal, or prefix `export PATH="/c/Program Files/dotnet:$PATH"` for the current one. |
+| Piped stdin never EOF-exits cleanly | The game loops `Geçersiz seçim` forever on stdin EOF; `printf ... \| exe \| sed` buffers and never flushes, so scripted verification looked hung / produced empty files. | Redirect the exe's stdout **straight to a file** and kill it after a few seconds, then read the file. Don't put `sed`/`head` between an interactive game and the file. |
+
+### Must absolutely avoid
+
+1. **Do not add Windows-specific (or any OS-specific) code paths into `Garaj.Core`.**
+   The whole value of this session is that the bring-up needed zero changes. Keep the
+   simulation OS-agnostic; portability is a load-bearing design property, not luck.
+2. **Do not assume a machine with `dotnet` can build.** Verify the SDK, not the host.
+3. **Do not port the console UI to mobile.** Console is disposable (§4). Mobile = Unity.
+4. Everything in §6 "Things to absolutely avoid" still applies unchanged.
 
 ---
 
