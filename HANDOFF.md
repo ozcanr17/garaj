@@ -2,7 +2,7 @@
 
 > Bu belge tamamen bağlamsız yeni bir oturum için yazıldı. Oyun içeriği ve README
 > Türkçedir; bu belge teknik aktarım olduğu için İngilizce/Türkçe karışıktır.
-> Son güncelleme: 2026-07-25 (Windows bring-up oturumu).
+> Son güncelleme: 2026-07-26 (EOF düzeltmesi).
 
 ---
 
@@ -69,7 +69,7 @@ a render layer. Do not try to make the console UI run on mobile.
 |---|---|---|
 | `dotnet` present ≠ SDK present | The `dotnet` host and .NET 6 runtime existed, so `dotnet` "worked", but `dotnet build`/`--version` failed. | Always check `dotnet --list-sdks`. Install `Microsoft.DotNet.SDK.10` via winget. |
 | Stale PATH in an open shell | After the winget install, shells opened *before* it don't see the SDK on PATH. | Open a new terminal, or prefix `export PATH="/c/Program Files/dotnet:$PATH"` for the current one. |
-| Piped stdin never EOF-exits cleanly | The game loops `Geçersiz seçim` forever on stdin EOF; `printf ... \| exe \| sed` buffers and never flushes, so scripted verification looked hung / produced empty files. | Redirect the exe's stdout **straight to a file** and kill it after a few seconds, then read the file. Don't put `sed`/`head` between an interactive game and the file. |
+| ~~Piped stdin never EOF-exits cleanly~~ **(FIXED 2026-07-26)** | The game looped `Geçersiz seçim` forever on stdin EOF, so scripted verification hung. This was a genuine bug, not a scripting quirk: `Console.ReadLine()` returns `null` at EOF and `Ui.Menu` re-prompted instead of exiting. | Fixed in `Ui.cs`: `ReadLineOrEof()` sets an `_eof` flag; `Menu` returns `0` (Geri), which unwinds every screen and quits cleanly. `AskMoney`/`Pause` no-op after EOF. Piped input now exits 0. Still avoid putting `sed`/`head` between the game and its output file — that buffering issue is separate and real. |
 
 ### Must absolutely avoid
 
@@ -124,7 +124,9 @@ without spending money on a 3D artist.
 
 - ~3,200 lines of C#, .NET 10, builds clean with **0 warnings, 0 errors**
 - Verified end to end by scripted playthrough (buy → repair → test drive → sell → reveal)
-- One commit on `main`: `a7859a2 feat: GARAJ simulation core — playable uncertainty prototype`
+- Builds and plays identically on macOS and Windows, with zero OS-specific code
+- The simulation core landed in `a7859a2`; for current history run `git log --oneline`
+  (deliberately not pinned here — a commit count goes stale the moment anyone commits)
 
 ### Run it
 

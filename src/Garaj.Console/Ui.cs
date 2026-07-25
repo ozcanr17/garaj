@@ -129,6 +129,25 @@ internal static class Ui
     }
 
     // -----------------------------------------------------------------------
+    // GİRDİ
+    //
+    // stdin kapandığında (EOF) Console.ReadLine() null döner. Bunu ele almazsak
+    // Menu sonsuza kadar "Geçersiz seçim" basar — borulanmış girdiyle yapılan
+    // her betikli doğrulama askıda kalır. EOF geldiğinde 0 (Geri) döneriz;
+    // bu tüm ekranları sırayla geri sarar ve oyun temiz şekilde kapanır.
+    // -----------------------------------------------------------------------
+
+    private static bool _eof;
+
+    /// <summary>stdin kapandı mı? Kapandıysa artık girdi sorulmaz.</summary>
+    public static bool IsEof => _eof;
+
+    private static string? ReadLineOrEof()
+    {
+        var line = Sys.ReadLine();
+        if (line is null) _eof = true;
+        return line;
+    }
 
     public static int Menu(string prompt, params string[] options)
     {
@@ -143,26 +162,35 @@ internal static class Ui
 
         while (true)
         {
+            if (_eof) return 0;
+
             Sys.WriteLine();
             Write($"{prompt} > ", ConsoleColor.Yellow);
-            var input = Sys.ReadLine()?.Trim();
+
+            var input = ReadLineOrEof()?.Trim();
+            if (input is null) return 0;                    // EOF → geri sar
             if (int.TryParse(input, out int n) && n >= 0 && n <= options.Length) return n;
+
             WriteLine("  Geçersiz seçim.", ConsoleColor.Red);
         }
     }
 
     public static decimal? AskMoney(string prompt)
     {
+        if (_eof) return null;
+
         Write($"{prompt} > ", ConsoleColor.Yellow);
-        var input = Sys.ReadLine()?.Trim().Replace(".", "").Replace(",", "").Replace("₺", "");
+        var input = ReadLineOrEof()?.Trim().Replace(".", "").Replace(",", "").Replace("₺", "");
         return decimal.TryParse(input, out var v) ? v : null;
     }
 
     public static void Pause()
     {
+        if (_eof) return;
+
         Sys.WriteLine();
         WriteLine("  [Devam etmek için Enter]", ConsoleColor.DarkGray);
-        Sys.ReadLine();
+        ReadLineOrEof();
     }
 
     public static void Clear()
