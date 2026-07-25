@@ -153,15 +153,18 @@ public static class DiagnosisEngine
             }
         }
 
-        // --- 3. Maskeleme ipuçları ve ifşalar ---
+        // --- 3. Duyusal detaylar (kusur açığa çıkarmaz, çıkarım hammaddesi verir) ---
+        result.Observations.AddRange(InspectionFlavor.For(v, m, rng));
+
+        // --- 4. Maskeleme ipuçları ve ifşalar ---
         foreach (var obs in ScamEngine.RollExposures(v, m.Id)) result.Observations.Add(obs);
         foreach (var obs in ScamEngine.RollTells(v, m.Id, rng)) result.Observations.Add(obs);
 
-        // --- 4. Belge çapraz doğrulaması ---
+        // --- 5. Belge çapraz doğrulaması ---
         if (m.Id == MethodId.Belgeler)
             result.Observations.AddRange(DocumentAnalyzer.FindContradictions(v, k));
 
-        // --- 5. Hiçbir şey bulunamadıysa da bunu söyle (yokluk da bilgidir) ---
+        // --- 6. Gerçekten hiçbir şey yoksa bunu da söyle (yokluk da bilgidir) ---
         if (result.Observations.Count == 0)
             result.Observations.Add(new Observation(
                 "Dikkat çeken bir şey görmedin. Bu, bir şey olmadığı anlamına gelmez.",

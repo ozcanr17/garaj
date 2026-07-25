@@ -255,6 +255,12 @@ until it exists.
 | Cars carrying a time bomb | 5–8% (blueprint §4.4) |
 | Profitable under selective repair | ~50% |
 | Margin on masked cars | must be **worse** than clean cars — otherwise scamming costs the player nothing |
+| Sale payout ÷ displayed market band | **1.00×**, and 0 cars out of band |
+
+The last row is a regression guard. `TrueMarketValue` once omitted the age factor that
+`RestoredValueBand` applied, so restored cars sold for 3–4× the band shown to the
+player. `TrueMarketValue` is now *derived from* `RestoredValueBand` specifically so the
+two cannot drift. **Never reintroduce a second, independent valuation formula.**
 
 Median margin at full asking price with *perfect* knowledge should sit near **−₺3.000**.
 Profit must come only from negotiation (10–25%) and correct diagnosis. If buying blind

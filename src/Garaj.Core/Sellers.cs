@@ -48,45 +48,25 @@ public sealed class Seller
         _ => Archetype.ToString()
     };
 
+    /// <summary>
+    /// Oyuncu bu satıcıyı, kendi gözüyle gördüğü bir kusuru inkâr ederken yakaladı mı?
+    /// Yakaladıysa bu kalıcıdır ve pazarlıkta oyuncunun eline koz verir.
+    /// </summary>
+    public bool ProvenLiar { get; set; }
+
+    /// <summary>Oyuncunun sorduğu grup sayısı — satıcının sabrını yer.</summary>
+    public int QuestionsAsked { get; set; }
+
     // -----------------------------------------------------------------------
-    // SORU-CEVAP: oyuncu bir sistem hakkında soru sorar
+    // SORU-CEVAP → SellerDialogue'a devredildi (bkz. Dialogue.cs)
     // -----------------------------------------------------------------------
 
-    public (string Answer, Observation? Tell) AskAbout(
-        SystemGroup group, VehicleInstance v, Random rng)
+    public DialogueResult AskAbout(SystemGroup group, VehicleInstance v, PlayerKnowledge k, Random rng)
     {
-        // Satıcının bu grupta bildiği kusurlar
-        var relevant = v.AllDefects
-            .Where(d => v.Part(d.PartId).Def.Group == group)
-            .Where(d => KnownDefectIds.Contains(d.Id))
-            .ToList();
-
-        if (relevant.Count == 0)
-        {
-            // Gerçekten bilmiyor — dürüstçe "bilmiyorum" der veya güven verir
-            return (Rng.Pick(rng, _honestUnknown), null);
-        }
-
-        bool willLie = !Rng.Chance(rng, Honesty);
-
-        if (!willLie)
-        {
-            var d = Rng.Pick(rng, relevant);
-            return ($"\"Bak, dürüst olayım — {d.Description.ToLowerInvariant()} " +
-                    $"Fiyata onu da kattım zaten.\"", null);
-        }
-
-        // Yalan söylüyor → tell sızdırma ihtimali
-        string lie = Rng.Pick(rng, _lies);
-        Observation? tell = null;
-
-        // Yalan söylerken tell verme ihtimali dürüstlükle ters orantılı,
-        // ama dolandırıcı arketip iyi oyuncudur: daha az sızdırır.
-        float tellChance = Archetype == SellerArchetype.Dolandirici ? 0.25f : 0.55f;
-        if (Rng.Chance(rng, tellChance))
-            tell = new Observation($"{Name}: {Rng.Pick(rng, _tells)}", ObservationKind.SellerTell, MethodId.Gozle);
-
-        return ($"\"{lie}\"", tell);
+        QuestionsAsked++;
+        var result = SellerDialogue.Respond(this, group, v, k, rng);
+        if (result.ProvenLiar) ProvenLiar = true;
+        return result;
     }
 
     /// <summary>Dürüst satıcı da gergin olabilir — tell'ler güvenilmez olmalı (§4.3).</summary>
@@ -129,7 +109,11 @@ public sealed class Seller
     public decimal ReservePrice(VehicleInstance v)
     {
         float flex = PriceFlexibility + Desperation * 0.10f + NegotiationRounds * 0.02f;
-        flex = Math.Clamp(flex, 0.02f, 0.40f);
+
+        // Yüzüne karşı yalan söylerken yakalandıysa pazarlık gücü zayıflar
+        if (ProvenLiar) flex += 0.09f;
+
+        flex = Math.Clamp(flex, 0.02f, 0.45f);
         return Cash.RoundTo(v.AskingPrice * (decimal)(1f - flex), 100);
     }
 
@@ -164,23 +148,8 @@ public sealed class Seller
         return new NegotiationOutcome(false, counter, line);
     }
 
-    // -----------------------------------------------------------------------
-
-    private static readonly string[] _honestUnknown =
-    [
-        "\"Valla ben o kadarını bilmiyorum, babamın arabasıydı.\"",
-        "\"Ha onu bilmiyorum işte. Ben sadece bakımını yaptırdım.\"",
-        "\"O konuda bir şey diyemem, hiç sorun çıkarmadı bana.\"",
-    ];
-
-    private static readonly string[] _lies =
-    [
-        "Yok yok, orada hiçbir sorun yok. Geçen ay bakımdan çıktı.",
-        "O ses normal, bütün bu modellerde var. Hepsinde. Gerçekten hepsinde.",
-        "Sıfır gibi. Ben bu arabaya bakmadım desem yalan olur.",
-        "Hiç dokunmadım oraya. Fabrika çıkışı neyse o.",
-        "Bir arkadaş baktı, 'bunda iş yok' dedi. Ustaydı adam.",
-    ];
+    // Diyalog satırları SellerDialogue'da (Dialogue.cs) — arketip ve duruma göre
+    // dallanıyor. Buradaki genel diziler oradaki sisteme taşındı.
 
     private static readonly string[] _tells =
     [

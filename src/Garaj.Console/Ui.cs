@@ -105,6 +105,7 @@ internal static class Ui
             ObservationKind.Suspicion     => ("  ? ŞÜPHE       ", ConsoleColor.Magenta),
             ObservationKind.Contradiction => ("  ! ÇELİŞKİ     ", ConsoleColor.Cyan),
             ObservationKind.SellerTell    => ("  ~ SATICI      ", ConsoleColor.DarkCyan),
+            ObservationKind.Detail        => ("  · gördüğün    ", ConsoleColor.Gray),
             _                             => ("  · not         ", ConsoleColor.DarkGray),
         };
 

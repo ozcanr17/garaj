@@ -75,6 +75,29 @@ internal static class Balance
         }
 
         // Satıcı arketip dağılımı
+        // REGRESYON KONTROLÜ: onarılmış aracın satış bedeli, oyuncuya gösterilen
+        // piyasa bandının İÇİNDE kalmalı. Bir kez bandın 3-4 katı ödeniyordu.
+        Sys.WriteLine();
+        Sys.WriteLine("  SATIŞ BEDELİ vs GÖSTERİLEN PİYASA BANDI:");
+        var ratios = new List<double>();
+        int outOfBand = 0;
+        foreach (var r in rows)
+        {
+            // Aracı tamamen onar, sonra ne ödendiğine bak
+            foreach (var p in r.V.Parts.Values)
+            {
+                p.Condition = 92f;
+                p.Defects.Clear();
+            }
+            var (lo, hi) = Valuation.RestoredValueBand(r.V);
+            decimal payout = Valuation.TrueMarketValue(r.V);
+            ratios.Add((double)(payout / ((lo + hi) / 2m)));
+            if (payout < lo * 0.85m || payout > hi * 1.15m) outOfBand++;
+        }
+        Sys.WriteLine($"    Ödeme / bant ortası oranı : ort {ratios.Average():F2}×   " +
+                      $"min {ratios.Min():F2}×   max {ratios.Max():F2}×   (1.00× olmalı)");
+        Sys.WriteLine($"    Bandın dışında kalan      : {outOfBand}/{count}  (0 olmalı)");
+
         Sys.WriteLine();
         Sys.WriteLine("  SATICI ARKETİPLERİ:");
         foreach (var g in rows.GroupBy(r => r.S.Archetype).OrderByDescending(g => g.Count()))

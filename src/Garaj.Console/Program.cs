@@ -227,6 +227,9 @@ internal static class Program
             Ui.Write("  Sabrı: ", ConsoleColor.DarkGray);
             Ui.WriteLine(s.PatienceMood, s.PatienceRemaining <= 1 ? ConsoleColor.Red : ConsoleColor.Gray);
 
+            if (s.ProvenLiar)
+                Ui.WriteLine("  ⚠ Bu adamı yüzüne karşı yalan söylerken yakaladın.", ConsoleColor.Red);
+
             if (s.WalkedAway)
             {
                 Ui.WriteLine("\n  Satıcı gitti. Bu araç artık senin için yok.", ConsoleColor.Red);
@@ -462,10 +465,24 @@ internal static class Program
         Ui.WriteLine($"  Sen: \"{PartCatalog.GroupName(group)} tarafında bir sıkıntı var mı?\"\n",
                      ConsoleColor.Gray);
 
-        var (answer, tell) = s.AskAbout(group, v, _rng);
-        Ui.WriteLine("  " + s.Name + ": " + Ui.Wrap(answer, 55, 4), ConsoleColor.White);
+        var reply = s.AskAbout(group, v, k, _rng);
+        Ui.WriteLine("  " + s.Name + ": " + Ui.Wrap(reply.Answer, 55, 4), ConsoleColor.White);
 
-        var surfaced = tell ?? s.RollFalseTell(_rng);
+        // Oyuncunun kendi gözüyle gördüğünü inkâr etmek kalıcı bir kırılma anıdır
+        if (reply.Stance == SellerStance.IsrarliYalan)
+        {
+            Sys.WriteLine();
+            Ui.WriteLine("  Bunu sen zaten kendi gözünle gördün. Adam yüzüne karşı inkâr ediyor.",
+                         ConsoleColor.Red);
+        }
+        else if (reply.Stance == SellerStance.Yakalandi)
+        {
+            Sys.WriteLine();
+            Ui.WriteLine("  Bulduğun şeyi kabul etti. Artık pazarlıkta elinde bir koz var.",
+                         ConsoleColor.Green);
+        }
+
+        var surfaced = reply.Tell ?? s.RollFalseTell(_rng);
         if (surfaced is not null)
         {
             Sys.WriteLine();

@@ -103,6 +103,11 @@ public enum ObservationKind
     Suspicion,
     /// <summary>Rahatlatıcı bulgu.</summary>
     Reassurance,
+    /// <summary>
+    /// Duyusal detay. Kusur açığa çıkarmaz — durumla ilişkili bir gözlemdir.
+    /// Oyuncunun çıkarım yapacağı hammadde budur.
+    /// </summary>
+    Detail,
     /// <summary>Belgeler arası çelişki.</summary>
     Contradiction,
     /// <summary>Satıcının davranışsal ipucu.</summary>

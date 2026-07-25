@@ -31,14 +31,22 @@ public static class Valuation
     /// <summary>Aracın gerçek piyasa değeri — sadece satış anında hesaplanır.</summary>
     public static decimal TrueMarketValue(VehicleInstance v)
     {
+        // KRİTİK: satış değeri, oyuncuya GÖSTERİLEN piyasa bandından TÜRETİLİR.
+        // Ayrı bir formülle hesaplanırsa ikisi kaçınılmaz olarak birbirinden ayrışır.
+        // (Bu tam olarak bir kez oldu: TrueMarketValue'da yaş çarpanı yoktu ve araçlar
+        // bandın 3-4 katına satılıyordu. İki formül = iki gerçek = hata.)
+        var (lo, hi) = RestoredValueBand(v);
+        decimal restoredMid = (lo + hi) / 2m;
+
+        // Bandın ortası "iyi durumda" (≈90 puan) bir aracı temsil eder.
+        // Gerçek ortalama durum bundan saparsa değer orantılı olarak kayar.
         float avgCondition = v.Parts.Values.Average(p => p.Condition);
-        decimal baseValue = BaseValueFor(v);
+        decimal conditionScale = (decimal)Math.Clamp(
+            0.32f + avgCondition / 100f * 0.76f, 0.25f, 1.10f);
 
-        decimal value = baseValue;
-        value *= (decimal)(0.45f + avgCondition / 100f * 0.95f);
-        value *= (decimal)Math.Clamp(1.15f - v.TrueOdometer / 600_000f, 0.60f, 1.15f);
+        decimal value = restoredMid * conditionScale;
 
-        // Keşfedilmemiş ağır kusurlar değeri düşürür (alıcı ekspertizi bulur)
+        // Kusurlar değeri düşürür — alıcının ekspertizi bunları bulur
         foreach (var d in v.AllDefects)
             value -= d.ExtraRepairCost * 0.6m;
 
