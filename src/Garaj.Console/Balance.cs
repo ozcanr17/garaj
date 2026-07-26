@@ -10,6 +10,74 @@ namespace GarajApp;
 /// </summary>
 internal static class Balance
 {
+    /// <summary>
+    /// Storyteller test aracı: zamanı ilerletip olay tetikler, otomatik seçim
+    /// yapar ve dağılımı raporlar. Kullanım: --events [tur] [seed]
+    /// </summary>
+    public static void RunEvents(int turns, int seed)
+    {
+        var rng = new Random(seed);
+        var p = new PlayerState();
+        // Bazı olaylar için bağlam kur
+        p.Equipment.Add("obd");
+        p.CarsSold = 2;
+        var story = new Storyteller();
+
+        var catCount = new Dictionary<EventCategory, int>();
+        var idCount = new Dictionary<string, int>();
+        int fired = 0;
+
+        Sys.WriteLine();
+        Sys.WriteLine($"=== STORYTELLER SİMÜLASYONU — {turns} tur, seed {seed} ===");
+        Sys.WriteLine();
+
+        for (int i = 0; i < turns; i++)
+        {
+            // Her tur biraz aktivite: zaman ilerlet, durumu dalgalandır
+            p.AdvanceMinutes(rng.Next(120, 260));
+            p.Money += rng.Next(-15_000, 20_000);
+            p.Money = Math.Max(2_000m, p.Money);
+            if (Rng.Chance(rng, 0.15f)) p.RiskySales++;
+
+            var ev = story.MaybeFire(p, rng);
+            if (ev is null) continue;
+
+            fired++;
+            catCount[ev.Category] = catCount.GetValueOrDefault(ev.Category) + 1;
+            idCount[ev.Id] = idCount.GetValueOrDefault(ev.Id) + 1;
+
+            var ctx = new StoryContext { Player = p, Rng = rng };
+            decimal moneyBefore = p.Money;
+            float repBefore = p.Reputation;
+            var choice = ev.Choices[rng.Next(ev.Choices.Count)];
+            string result = choice.Apply(ctx);
+
+            if (fired <= 14)   // ilk birkaç olayı örnek olarak yazdır
+            {
+                Sys.WriteLine($"  Gün {p.Day,2} · [{ev.Category,-8}] {ev.Title}");
+                Sys.WriteLine($"      → \"{choice.Label}\"");
+                Sys.WriteLine($"        {result}");
+                decimal dM = p.Money - moneyBefore;
+                float dR = p.Reputation - repBefore;
+                if (dM != 0 || Math.Abs(dR) > 0.01f)
+                    Sys.WriteLine($"        (para {dM:+#,##0;-#,##0;0}₺, itibar {dR:+0.#;-0.#;0})");
+                Sys.WriteLine();
+            }
+        }
+
+        Sys.WriteLine($"  {turns} turda {fired} olay tetiklendi (~{fired * 100.0 / turns:F0}%).");
+        Sys.WriteLine();
+        Sys.WriteLine("  KATEGORİ DAĞILIMI:");
+        foreach (var g in catCount.OrderByDescending(x => x.Value))
+            Sys.WriteLine($"    {g.Key,-10} {g.Value,3}  (%{g.Value * 100.0 / Math.Max(1, fired):F0})");
+        Sys.WriteLine();
+        Sys.WriteLine("  OLAY ÇEŞİTLİLİĞİ:");
+        foreach (var g in idCount.OrderByDescending(x => x.Value))
+            Sys.WriteLine($"    {g.Key,-22} {g.Value,3}");
+        Sys.WriteLine();
+    }
+
+
     public static void Run(int count, int seed)
     {
         var rng = new Random(seed);

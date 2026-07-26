@@ -239,13 +239,38 @@ public sealed class PlayerState
     public decimal PurchasePrice { get; set; }
     public decimal RepairSpend { get; set; }
 
+    // --- Storyteller kancası (§8.2) ---
+
+    /// <summary>Kaç araç satıldı.</summary>
+    public int CarsSold { get; set; }
+
+    /// <summary>
+    /// Gizli/açıklanmamış kusurla satılan araç sayısı. "Sattığın araç geri geldi"
+    /// olayı bunu tüketir — kötü satışın bedelini sonradan ödersin.
+    /// </summary>
+    public int RiskySales { get; set; }
+
+    /// <summary>Parça fiyatı çarpanı (piyasa olayları). 1.0 = normal.</summary>
+    public float PartsCostMultiplier { get; set; } = 1f;
+    /// <summary>Çarpanın geçerli olduğu son gün; bu günden sonra 1.0'a döner.</summary>
+    public int PartsCostUntilDay { get; set; }
+
+    /// <summary>Mahmut Usta hasta mı (ipucu kaynağı kesik — ileride kullanılacak).</summary>
+    public bool MahmutIll { get; set; }
+
     public bool Has(string equipmentId) => Equipment.Contains(equipmentId);
 
     public string Clock => $"{Minutes / 60:00}:{Minutes % 60:00}";
+
+    /// <summary>Geçerli parça fiyatı çarpanı — süresi dolduysa 1.0.</summary>
+    public float PartsMultiplier => Day <= PartsCostUntilDay ? PartsCostMultiplier : 1f;
 
     public void AdvanceMinutes(int m)
     {
         Minutes += m;
         while (Minutes >= 24 * 60) { Minutes -= 24 * 60; Day++; }
     }
+
+    /// <summary>Olay tetikleyici için: oyun başından beri geçen toplam dakika.</summary>
+    public long TotalMinutes => (long)Day * 24 * 60 + Minutes;
 }

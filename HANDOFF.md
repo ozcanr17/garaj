@@ -2,7 +2,7 @@
 
 > Bu belge tamamen bağlamsız yeni bir oturum için yazıldı. Oyun içeriği ve README
 > Türkçedir; bu belge teknik aktarım olduğu için İngilizce/Türkçe karışıktır.
-> Son güncelleme: 2026-07-26 (söküm + cıvata mekaniği; geri alınamazlık direği).
+> Son güncelleme: 2026-07-26 (storyteller olay sistemi + çift-tık başlatma scriptleri).
 
 ---
 
@@ -122,7 +122,7 @@ A **playable simulation-core prototype** — no art, no Unity, no Blender. It ex
 answer the blueprint's own Faz 0 question, *"Kaputu açmak heyecan verici mi?"*,
 without spending money on a 3D artist.
 
-- ~5,300 lines of C#, .NET 10, builds clean with **0 warnings, 0 errors**
+- ~5,800 lines of C#, .NET 10, builds clean with **0 warnings, 0 errors**
 - Verified end to end by scripted playthrough (buy → repair → test drive → sell → reveal)
 - Builds and plays identically on macOS and Windows, with zero OS-specific code
 - The simulation core landed in `a7859a2`; for current history run `git log --oneline`
@@ -130,15 +130,22 @@ without spending money on a 3D artist.
 
 ### Run it
 
+Easiest — **double-click a launch script** (builds Release, then plays):
+- macOS: `GARAJ-Oyna.command` (Finder double-click; opens Terminal)
+- Windows: `GARAJ-Oyna.bat`
+
+From a terminal:
 ```bash
 cd ~/Desktop/workspace/garaj
 dotnet run --project src/Garaj.Console                       # play
 dotnet run --project src/Garaj.Console -- 12345              # fixed seed
 dotnet run --project src/Garaj.Console -- --balance 1000 7   # economy report
+dotnet run --project src/Garaj.Console -- --events 80 7      # storyteller sim
 ```
 
 `dotnet` was installed via Homebrew during the first session. It is **not on the
 default PATH** — prefix commands with `export PATH="/opt/homebrew/bin:$PATH"`.
+(The `.command` script already adds the Homebrew path itself.)
 
 ### File map
 
@@ -155,6 +162,7 @@ default PATH** — prefix commands with `export PATH="/opt/homebrew/bin:$PATH"`.
 | `src/Garaj.Core/Negotiation.cs` | Findings become citable leverage; concessions, backfires |
 | `src/Garaj.Core/Documents.cs` | Papers Please document desk — player finds contradictions |
 | `src/Garaj.Core/Disassembly.cs` | Dependency-graph teardown, bolt states, strip/helicoil, torque |
+| `src/Garaj.Core/Storyteller.cs` | Adaptive random-event director (§8.2), 15 events, real effects |
 | `src/Garaj.Core/Economy.cs` | Valuation, repair, sale, equipment, `PlayerState` |
 | `src/Garaj.Console/Program.cs` | Game loop and all screens |
 | `src/Garaj.Console/Ui.cs` | Confidence-band rendering, colours, menus |
@@ -226,6 +234,20 @@ impossible for a screen to leak the truth by accident. Preserve it in any Unity 
   per reinstalled part (Dikkatli 12% each), so deep jobs compound risk — intended, but if
   playtesting says early game feels punishing, lower the `Disassembly.Torque` flaw chances
   before touching anything else.
+- **Storyteller** (`Storyteller.cs`) — adaptive random-event director (§8.2/§4.1). Fires
+  from the main-menu loop via `MaybeFire`, gated on ~150 in-game minutes of activity between
+  events plus a 72% roll, with per-category anti-repeat. **Adaptive weighting** (`CategoryBias`):
+  wealthy players draw more Dükkan trouble (tax/theft — the blueprint's irony), struggling
+  players get biased toward Müşteri/Hikâye (breathing room). 15 events across
+  dükkan/müşteri/piyasa/hikâye; effects are **concrete**, not flavor — money, reputation, time,
+  a temporary parts-cost multiplier (`PlayerState.PartsMultiplier`, shown in the status bar),
+  and equipment loss. `Sattığın Araç Bozuldu` is gated on `PlayerState.RiskySales`, which the
+  sell screen increments when you offload a car whose real defects the buyer didn't catch —
+  closing the karma loop. **Invariants:** arm the clock on the first `MaybeFire` (no event on
+  turn one); events must remain skippable-proof (the player always resolves one, no soft-lock);
+  keep effects going through `StoryContext` so the sim harness can replay them. Verify with
+  `--events N seed` (deterministic; prints category distribution and a sample log) — target
+  ~50% fire rate and all four categories represented.
 
 ---
 

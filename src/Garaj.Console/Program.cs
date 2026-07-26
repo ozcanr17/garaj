@@ -12,11 +12,20 @@ internal static class Program
 {
     private static Random _rng = new();
     private static readonly PlayerState _player = new();
+    private static readonly Storyteller _story = new();
     private static List<Listing> _listings = [];
 
     private static void Main(string[] args)
     {
         try { Sys.OutputEncoding = System.Text.Encoding.UTF8; } catch { }
+
+        if (args.Length > 0 && args[0] == "--events")
+        {
+            int t = args.Length > 1 && int.TryParse(args[1], out var tc) ? tc : 60;
+            int eseed = args.Length > 2 && int.TryParse(args[2], out var es) ? es : 1;
+            Balance.RunEvents(t, eseed);
+            return;
+        }
 
         if (args.Length > 0 && args[0] == "--balance")
         {
@@ -77,6 +86,10 @@ internal static class Program
     {
         while (true)
         {
+            // Storyteller: yeterli aktivite biriktiyse bir olay çıkabilir (§8.2)
+            var ev = _story.MaybeFire(_player, _rng);
+            if (ev is not null) { ShowEvent(ev); continue; }
+
             Ui.Clear();
             StatusBar();
 
@@ -96,6 +109,51 @@ internal static class Program
         }
     }
 
+    private static readonly Dictionary<EventCategory, string> _catName = new()
+    {
+        [EventCategory.Dukkan] = "DÜKKAN",
+        [EventCategory.Musteri] = "MÜŞTERİ",
+        [EventCategory.Piyasa] = "PİYASA",
+        [EventCategory.Hikaye] = "HİKÂYE",
+    };
+
+    /// <summary>Bir storyteller olayını sun; seçim varsa oyuncuya seçtir.</summary>
+    private static void ShowEvent(GameEvent ev)
+    {
+        Ui.Clear();
+        StatusBar();
+        Ui.Header($"OLAY · {_catName[ev.Category]}");
+
+        Ui.WriteLine("  " + ev.Title, ConsoleColor.Yellow);
+        Sys.WriteLine();
+        Ui.WriteLine("  " + Ui.Wrap(ev.Body, 60, 2), ConsoleColor.White);
+
+        var ctx = new StoryContext { Player = _player, Rng = _rng };
+
+        EventChoice pick;
+        if (ev.Choices.Count == 1)
+        {
+            Ui.Pause();
+            pick = ev.Choices[0];
+        }
+        else
+        {
+            int c = Ui.Menu("Ne yapıyorsun?", ev.Choices.Select(x => x.Label).ToArray());
+            // 0 (Geri) = ilk seçenek varsayılanı; olaydan kaçış yok
+            pick = c == 0 ? ev.Choices[0] : ev.Choices[c - 1];
+        }
+
+        string result = pick.Apply(ctx);
+
+        Ui.Clear();
+        StatusBar();
+        Ui.Header($"OLAY · {_catName[ev.Category]}");
+        Ui.WriteLine("  " + ev.Title, ConsoleColor.DarkYellow);
+        Sys.WriteLine();
+        Ui.WriteLine("  " + Ui.Wrap(result, 60, 2), ConsoleColor.Cyan);
+        Ui.Pause();
+    }
+
     private static void StatusBar()
     {
         Ui.Rule();
@@ -106,6 +164,14 @@ internal static class Program
         Ui.Write(Ui.Money(_player.Money), _player.Money > 10_000m ? ConsoleColor.Green : ConsoleColor.Red);
         Ui.Write("   │   ", ConsoleColor.DarkGray);
         Ui.Write($"İtibar {_player.Reputation:F0}", ConsoleColor.Cyan);
+
+        float pm = _player.PartsMultiplier;
+        if (Math.Abs(pm - 1f) > 0.01f)
+        {
+            Ui.Write("   │   ", ConsoleColor.DarkGray);
+            Ui.Write(pm > 1f ? $"parça ↑%{(pm - 1f) * 100:F0}" : $"parça ↓%{(1f - pm) * 100:F0}",
+                     pm > 1f ? ConsoleColor.Red : ConsoleColor.Green);
+        }
 
         if (_player.Equipment.Count > 0)
         {
@@ -928,6 +994,7 @@ internal static class Program
 
         // --- ONARIM ---
         var (repCost, repHours, repMsg) = RepairEngine.Repair(v, target.Id, _rng);
+        repCost = Cash.RoundTo(repCost * (decimal)_player.PartsMultiplier, 100);  // piyasa olayları
         jobCost += repCost;
         jobMinutes += (int)(repHours * 60);
 
@@ -1129,6 +1196,12 @@ internal static class Program
         _player.Money += finalPrice;
         decimal profit = finalPrice - spent;
         _player.Reputation += profit > 0 ? 3f : -2f;
+        _player.CarsSold++;
+
+        // Alıcının yakalayamadığı gerçek kusurla sattıysan, bu geri gelebilir (§4.4).
+        var undisclosed = v.AllDefects.Count(d => d.SurfacesAfterKm == 0);
+        if (undisclosed > 0 && sale.BuyerFindings.Count < undisclosed)
+            _player.RiskySales++;
 
         Sys.WriteLine();
         Ui.WriteLine($"  SATILDI — {Ui.Money(finalPrice)}", ConsoleColor.Green);
