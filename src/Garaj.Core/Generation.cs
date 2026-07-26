@@ -305,59 +305,65 @@ public static class VehicleGenerator
     // KUSUR ÜRETİMİ
     // -----------------------------------------------------------------------
 
+    /// <summary>
+    /// Kusur şablonu. PartId verilirse kusur SADECE o parçaya atanır.
+    /// Metin belirli bir parçayı adıyla anıyorsa (ör. "radyatör peteğinden")
+    /// PartId ZORUNLUDUR — aksi halde "Su Hortumları: radyatör peteğinden
+    /// sızıntı var" gibi saçma eşleşmeler çıkıyor.
+    /// </summary>
     private sealed record DefectTemplate(
         SystemGroup Group, DefectType Type, string Description,
-        MethodId[] RevealedBy, decimal ExtraCost);
+        MethodId[] RevealedBy, decimal ExtraCost, string? PartId = null);
 
     private static readonly DefectTemplate[] _defectTemplates =
     [
         new(SystemGroup.Motor, DefectType.Kacak, "karter contasından yağ sızıyor, altı ıslak.",
-            [MethodId.Lift, MethodId.Dokunma, MethodId.TestSurusuUzun], 2_200m),
+            [MethodId.Lift, MethodId.Dokunma, MethodId.TestSurusuUzun], 2_200m, "krank_kecesi"),
         new(SystemGroup.Motor, DefectType.Gurultu, "triger bölgesinden ritmik bir tıkırtı geliyor.",
-            [MethodId.Calistir, MethodId.TestSurusuKisa, MethodId.TestSurusuUzun], 1_800m),
+            [MethodId.Calistir, MethodId.TestSurusuKisa, MethodId.TestSurusuUzun, MethodId.Stetoskop], 1_800m, "triger_kayis"),
         new(SystemGroup.Motor, DefectType.Asinma, "silindirler arası kompresyon dengesiz.",
-            [MethodId.Kompresyon, MethodId.Endoskop], 14_000m),
+            [MethodId.Kompresyon, MethodId.Endoskop, MethodId.LeakDown, MethodId.YagAnalizi], 14_000m, "motor_blok"),
         new(SystemGroup.Motor, DefectType.Kacak, "silindir kapak contası su-yağ karıştırıyor.",
-            [MethodId.Kompresyon, MethodId.TestSurusuUzun, MethodId.Endoskop], 6_500m),
+            [MethodId.Kompresyon, MethodId.TestSurusuUzun, MethodId.Endoskop, MethodId.LeakDown], 6_500m, "kapak_conta"),
 
         new(SystemGroup.Sogutma, DefectType.Kacak, "radyatör peteğinden sızıntı izi var.",
-            [MethodId.Gozle, MethodId.Lift, MethodId.TestSurusuUzun], 2_400m),
+            [MethodId.Gozle, MethodId.Lift, MethodId.TestSurusuUzun], 2_400m, "radyator"),
         new(SystemGroup.Sogutma, DefectType.Tikanma, "termostat takılı kalmış, hararet dengesiz.",
-            [MethodId.TestSurusuUzun, MethodId.OBD], 900m),
+            [MethodId.TestSurusuUzun, MethodId.OBD, MethodId.TermalKamera], 900m, "termostat"),
 
         new(SystemGroup.Sanziman, DefectType.Asinma, "debriyaj çok yüksekte kavrıyor, balata bitmek üzere.",
-            [MethodId.TestSurusuKisa, MethodId.TestSurusuUzun], 3_800m),
+            [MethodId.TestSurusuKisa, MethodId.TestSurusuUzun], 3_800m, "debriyaj"),
         new(SystemGroup.Sanziman, DefectType.Bosluk, "2. viteste zorlama var, senkromeç yorgun.",
-            [MethodId.TestSurusuUzun], 9_000m),
+            [MethodId.TestSurusuUzun, MethodId.Stetoskop, MethodId.ProOBD], 9_000m, "sanziman"),
 
         new(SystemGroup.Fren, DefectType.Asinma, "balatalar sınırın altına inmiş.",
-            [MethodId.Gozle, MethodId.Lift, MethodId.TestSurusuKisa], 800m),
+            [MethodId.Gozle, MethodId.Lift, MethodId.TestSurusuKisa], 800m, "on_balata"),
         new(SystemGroup.Fren, DefectType.Egilme, "diskler tabla yapmış, frende titreme var.",
-            [MethodId.TestSurusuKisa, MethodId.Lift], 1_600m),
+            [MethodId.TestSurusuKisa, MethodId.Lift], 1_600m, "on_disk"),
 
         new(SystemGroup.Suspansiyon, DefectType.Bosluk, "rotilde elle hissedilen boşluk var.",
-            [MethodId.Lift], 1_100m),
+            [MethodId.Lift], 1_100m, "rotil"),
         new(SystemGroup.Suspansiyon, DefectType.Kacak, "ön amortisör yağ atmış.",
-            [MethodId.Lift, MethodId.Gozle], 2_800m),
+            [MethodId.Lift, MethodId.Gozle], 2_800m, "on_amortisor"),
 
         new(SystemGroup.Elektrik, DefectType.ElektrikArizasi, "alternatör şarj dalgalanması yapıyor.",
-            [MethodId.OBD, MethodId.Calistir], 3_600m),
+            [MethodId.OBD, MethodId.Calistir, MethodId.TermalKamera], 3_600m, "alternator"),
         new(SystemGroup.Elektrik, DefectType.ElektrikArizasi, "kablo demetinde kemirgen hasarı var.",
-            [MethodId.Lift, MethodId.OBD], 5_200m),
+            [MethodId.Lift, MethodId.OBD, MethodId.TermalKamera, MethodId.ProOBD], 5_200m, "kablo_demeti"),
 
         new(SystemGroup.Kaporta, DefectType.Korozyon, "çamurluk iç kısmında kabaran pas var.",
-            [MethodId.Lift, MethodId.BoyaKalinlik], 4_500m),
+            [MethodId.Lift, MethodId.BoyaKalinlik, MethodId.SasiOlcum], 4_500m, "sol_on_camurluk"),
         new(SystemGroup.Kaporta, DefectType.Egilme, "panel düzeltilmiş, hat gözle fark ediliyor.",
-            [MethodId.BoyaKalinlik, MethodId.Gozle], 3_200m),
+            [MethodId.BoyaKalinlik, MethodId.Gozle, MethodId.SasiOlcum], 3_200m),
 
         new(SystemGroup.Egzoz, DefectType.Korozyon, "orta susturucu delinmiş, ses artıyor.",
-            [MethodId.Lift, MethodId.Calistir], 1_200m),
+            [MethodId.Lift, MethodId.Calistir], 1_200m, "egzoz_orta"),
 
         new(SystemGroup.IcMekan, DefectType.Asinma, "sürücü koltuğu yanı yırtılmış, sünger görünüyor.",
-            [MethodId.Gozle], 1_900m),
+            [MethodId.Gozle], 1_900m, "on_koltuklar"),
 
         new(SystemGroup.Tekerlek, DefectType.Asinma, "lastiklerin DOT tarihi eski, kauçuk sertleşmiş.",
-            [MethodId.Gozle, MethodId.Lift], 4_800m),
+            [MethodId.Gozle, MethodId.Lift, MethodId.Stetoskop], 4_800m, "lastikler"),
     ];
 
     private static void GenerateDefects(VehicleInstance v, Random rng)
@@ -366,7 +372,10 @@ public static class VehicleGenerator
 
         foreach (var part in v.Parts.Values)
         {
-            var candidates = _defectTemplates.Where(t => t.Group == part.Def.Group).ToList();
+            var candidates = _defectTemplates
+                .Where(t => t.Group == part.Def.Group)
+                .Where(t => t.PartId is null || t.PartId == part.DefId)
+                .ToList();
             if (candidates.Count == 0) continue;
 
             // Durum ne kadar kötüyse kusur ihtimali o kadar yüksek.
@@ -514,8 +523,8 @@ public static class VehicleGenerator
                 v.Part(d.PartId).Def.Name));
         }
 
-        // Motor değişmiş mi? (%10 — ruhsatla çelişir)
-        if (Rng.Chance(rng, 0.10f))
+        // Motor değişmiş mi? (%12 — ruhsatla çelişir)
+        if (Rng.Chance(rng, 0.12f))
         {
             docs.RuhsatEngineNumber = $"{(char)('A' + rng.Next(26))}{rng.Next(10, 99)}" +
                                       $"{(char)('A' + rng.Next(26))}{rng.Next(1000, 9999)}";
@@ -523,6 +532,36 @@ public static class VehicleGenerator
 
         docs.HasInspectionReport = Rng.Chance(rng, 0.7f);
         docs.InspectionYear = CurrentYear - rng.Next(0, 3);
+
+        // -------------------------------------------------------------------
+        // EK ÇELİŞKİ EKİMİ
+        //
+        // Km oynatma tek başına araçların ancak ~%2'sinde masada yakalanabiliyordu.
+        // Bu oranla belge masası ölü içerik olur: oyuncu on kez açar, hiçbir şey
+        // bulamaz, bir daha açmaz. Masanın açmaya değer olması için birden fazla
+        // çelişki türünün ekilmesi gerekiyor.
+        // Hedef: araçların ~%35-45'inde en az bir yakalanabilir çelişki.
+        // -------------------------------------------------------------------
+
+        // 1. Ruhsattaki model yılı ilandakinden farklı (%10)
+        if (Rng.Chance(rng, 0.10f))
+            docs.RuhsatModelYear = v.ModelYear + (Rng.Chance(rng, 0.5f) ? 1 : -1);
+
+        // 2. Tramer kaydı aracın üretiminden ÖNCE tarihli — fiziksel olarak imkânsız (%8)
+        if (Rng.Chance(rng, 0.08f) && docs.TramerRecords.Count > 0)
+            docs.TramerRecords[0] = docs.TramerRecords[0] with { Year = v.ModelYear - rng.Next(1, 4) };
+
+        // 3. Servis defterinde km geriye gidiyor — kayıtlar sonradan uydurulmuş (%16)
+        if (Rng.Chance(rng, 0.16f) && docs.ServiceHistory.Count >= 2)
+        {
+            int i = rng.Next(1, docs.ServiceHistory.Count);
+            int lower = Math.Max(1_000, docs.ServiceHistory[i - 1].Km - rng.Next(8_000, 30_000));
+            docs.ServiceHistory[i] = docs.ServiceHistory[i] with { Km = lower };
+        }
+
+        // 4. Muayene raporu gelecek tarihli (%4)
+        if (Rng.Chance(rng, 0.04f) && docs.HasInspectionReport)
+            docs.InspectionYear = CurrentYear + rng.Next(1, 3);
     }
 
     // -----------------------------------------------------------------------

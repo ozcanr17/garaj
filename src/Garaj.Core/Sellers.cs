@@ -57,6 +57,12 @@ public sealed class Seller
     /// <summary>Oyuncunun sorduğu grup sayısı — satıcının sabrını yer.</summary>
     public int QuestionsAsked { get; set; }
 
+    /// <summary>Pazarlıkta kaç koz masaya kondu. Fazlası satıcıyı bezdirir.</summary>
+    public int PressedCount { get; set; }
+
+    /// <summary>Kozlarla koparılan toplam taviz — taban fiyattan düşer.</summary>
+    public decimal ExtraConcession { get; set; }
+
     // -----------------------------------------------------------------------
     // SORU-CEVAP → SellerDialogue'a devredildi (bkz. Dialogue.cs)
     // -----------------------------------------------------------------------
@@ -114,7 +120,11 @@ public sealed class Seller
         if (ProvenLiar) flex += 0.09f;
 
         flex = Math.Clamp(flex, 0.02f, 0.45f);
-        return Cash.RoundTo(v.AskingPrice * (decimal)(1f - flex), 100);
+
+        // Kozlarla koparılan tavizler doğrudan taban fiyattan düşer —
+        // teşhis yapmanın pazarlıktaki somut karşılığı budur.
+        decimal reserve = v.AskingPrice * (decimal)(1f - flex) - ExtraConcession;
+        return Cash.RoundTo(Math.Max(v.AskingPrice * 0.30m, reserve), 100);
     }
 
     public NegotiationOutcome Negotiate(decimal offer, VehicleInstance v, Random rng)

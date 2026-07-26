@@ -98,6 +98,42 @@ internal static class Balance
                       $"min {ratios.Min():F2}×   max {ratios.Max():F2}×   (1.00× olmalı)");
         Sys.WriteLine($"    Bandın dışında kalan      : {outOfBand}/{count}  (0 olmalı)");
 
+        // BELGE MASASI CANLILIK KONTROLÜ: masada yakalanabilir çelişki taşıyan
+        // araç oranı. Düşükse masa ölü içeriktir — oyuncu boşuna kurcalar.
+        Sys.WriteLine();
+        int kmCatch = 0, engineCatch = 0, yearCatch = 0, tramerCatch = 0,
+            serviceCatch = 0, inspectCatch = 0, anyCatch = 0;
+        foreach (var r in rows)
+        {
+            var d = r.V.Documents;
+            bool km = d.ServiceHistory.Count > 0 && d.ServiceHistory.Max(s => s.Km) > r.V.OdometerReading;
+            bool eng = !string.IsNullOrEmpty(d.RuhsatEngineNumber) && d.RuhsatEngineNumber != r.V.EngineNumber;
+            bool yr = d.RuhsatModelYear != r.V.ModelYear;
+            bool tr = d.TramerRecords.Any(t => t.Year < r.V.ModelYear);
+            bool insp = d.HasInspectionReport && d.InspectionYear > VehicleGenerator.CurrentYear;
+
+            bool svc = false;
+            for (int i = 1; i < d.ServiceHistory.Count; i++)
+                if (d.ServiceHistory[i].Year > d.ServiceHistory[i - 1].Year &&
+                    d.ServiceHistory[i].Km < d.ServiceHistory[i - 1].Km) svc = true;
+
+            if (km) kmCatch++;
+            if (eng) engineCatch++;
+            if (yr) yearCatch++;
+            if (tr) tramerCatch++;
+            if (svc) serviceCatch++;
+            if (insp) inspectCatch++;
+            if (km || eng || yr || tr || svc || insp) anyCatch++;
+        }
+        Sys.WriteLine("  BELGE MASASINDA YAKALANABİLİR ÇELİŞKİ:");
+        Sys.WriteLine($"    Km oynatma (servis defteri ele veriyor) : {kmCatch,4}/{count}  (%{kmCatch * 100.0 / count:F0})");
+        Sys.WriteLine($"    Motor no uyuşmazlığı                    : {engineCatch,4}/{count}  (%{engineCatch * 100.0 / count:F0})");
+        Sys.WriteLine($"    Ruhsat model yılı uyuşmazlığı           : {yearCatch,4}/{count}  (%{yearCatch * 100.0 / count:F0})");
+        Sys.WriteLine($"    Tramer kaydı araçtan eski               : {tramerCatch,4}/{count}  (%{tramerCatch * 100.0 / count:F0})");
+        Sys.WriteLine($"    Servis defterinde km geri gidiyor       : {serviceCatch,4}/{count}  (%{serviceCatch * 100.0 / count:F0})");
+        Sys.WriteLine($"    Muayene raporu gelecek tarihli          : {inspectCatch,4}/{count}  (%{inspectCatch * 100.0 / count:F0})");
+        Sys.WriteLine($"    EN AZ BİR ÇELİŞKİ TAŞIYAN ARAÇ          : {anyCatch,4}/{count}  (%{anyCatch * 100.0 / count:F0})   hedef ~%40");
+
         Sys.WriteLine();
         Sys.WriteLine("  SATICI ARKETİPLERİ:");
         foreach (var g in rows.GroupBy(r => r.S.Archetype).OrderByDescending(g => g.Count()))

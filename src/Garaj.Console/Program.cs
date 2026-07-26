@@ -50,7 +50,7 @@ internal static class Program
         Ui.WriteLine("  Simülasyon çekirdeği — oynanabilir prototip", ConsoleColor.DarkGray);
         Ui.WriteLine($"  seed: {seed}", ConsoleColor.DarkGray);
         Sys.WriteLine();
-        Ui.WriteLine("  Babandan kalan garajda ₺250.000 sermayen var.", ConsoleColor.Gray);
+        Ui.WriteLine("  Babandan kalan garajda ₺60.000 sermayen var.", ConsoleColor.Gray);
         Ui.WriteLine("  Bir araç al, ne aldığını çözmeye çalış, onar, sat.", ConsoleColor.Gray);
         Sys.WriteLine();
         Ui.WriteLine("  Hiçbir sayı kesin değildir. Hiçbir satıcı tam dürüst değildir.", ConsoleColor.DarkYellow);
@@ -241,6 +241,7 @@ internal static class Program
             int c = Ui.Menu("Ne yapıyorsun?",
                 "Teşhis yap",
                 "Satıcıya soru sor",
+                $"Belge masası        ({k.ProvenContradictions.Count} çelişki kanıtlandı)",
                 $"Ekspertiz tablosu   ({k.MethodsUsed.Count} yöntem kullanıldı)",
                 $"Bulgular            ({k.Observations.Count} not)",
                 "Pazarlık / satın al");
@@ -250,9 +251,10 @@ internal static class Program
                 case 0: return;
                 case 1: DiagnosisScreen(v, k, s); break;
                 case 2: AskSellerScreen(v, s, k); break;
-                case 3: StatusTable(v, k, showBet: true); break;
-                case 4: ObservationsScreen(k); break;
-                case 5:
+                case 3: DocumentDeskScreen(v, k, s); break;
+                case 4: StatusTable(v, k, showBet: true); break;
+                case 5: ObservationsScreen(k); break;
+                case 6:
                     if (NegotiateScreen(l)) return;
                     break;
             }
@@ -294,9 +296,10 @@ internal static class Program
             var labels = usable.Select(m =>
             {
                 string used = k.MethodsUsed.Contains(m.Id) ? "✓" : " ";
-                string cost = m.Cost > 0 ? Ui.Money(m.Cost) : "ücretsiz";
+                decimal cst = EffectiveCost(m);
+                string cost = cst > 0 ? Ui.Money(cst) : "ücretsiz";
                 string pat = s is not null && m.RequiresSellerPermission ? $"sabır -{m.PatienceCost}" : "";
-                return $"{used} {m.Name,-24} {cost,10}  {m.Minutes,3}dk  {pat}";
+                return $"{used} {m.Name,-26} {cost,10}  {m.Minutes,4}dk  {pat}";
             }).ToArray();
 
             int c = Ui.Menu("Yöntem seç", labels);
@@ -304,7 +307,7 @@ internal static class Program
 
             var method = usable[c - 1];
 
-            if (_player.Money < method.Cost)
+            if (_player.Money < EffectiveCost(method))
             {
                 Ui.WriteLine("\n  Bu teşhis için paran yok.", ConsoleColor.Red);
                 Ui.Pause();
@@ -314,6 +317,10 @@ internal static class Program
             RunDiagnosis(v, k, s, method);
         }
     }
+
+    /// <summary>Lift satın alındıysa alttan bakmak artık ücretsizdir.</summary>
+    private static decimal EffectiveCost(DiagnosisMethod m)
+        => m.Id == MethodId.Lift && _player.Has("lift") ? 0m : m.Cost;
 
     private static void RunDiagnosis(VehicleInstance v, PlayerKnowledge k, Seller? s, DiagnosisMethod m)
     {
@@ -331,17 +338,21 @@ internal static class Program
             return;
         }
 
-        _player.Money -= result.Cost;
+        decimal paid = EffectiveCost(m);
+        _player.Money -= paid;
         _player.AdvanceMinutes(result.Minutes);
 
         foreach (var obs in result.Observations)
             Ui.PrintObservation(obs);
 
         Sys.WriteLine();
-        if (result.Cost > 0)
-            Ui.WriteLine($"  Maliyet: {Ui.Money(result.Cost)}   Süre: {result.Minutes} dk", ConsoleColor.DarkGray);
+        string sure = result.Minutes >= 120 ? $"{result.Minutes / 60} saat" : $"{result.Minutes} dk";
+        if (paid > 0)
+            Ui.WriteLine($"  Maliyet: {Ui.Money(paid)}   Süre: {sure}", ConsoleColor.DarkGray);
+        else if (m.Id == MethodId.Lift && _player.Has("lift"))
+            Ui.WriteLine($"  Kendi liftin — ücretsiz.   Süre: {sure}", ConsoleColor.DarkGray);
         else
-            Ui.WriteLine($"  Süre: {result.Minutes} dk", ConsoleColor.DarkGray);
+            Ui.WriteLine($"  Süre: {sure}", ConsoleColor.DarkGray);
 
         Ui.Pause();
         StatusTable(v, k, showBet: false);
@@ -447,6 +458,158 @@ internal static class Program
     }
 
     // =======================================================================
+    // BELGE MASASI — oyun çelişkiyi söylemez, sen bulursun
+    // =======================================================================
+
+    private static void DocumentDeskScreen(VehicleInstance v, PlayerKnowledge k, Seller? s)
+    {
+        var docs = Enum.GetValues<DocumentId>();
+
+        while (true)
+        {
+            Ui.Clear();
+            StatusBar();
+            Ui.Header("Ofis masası — belgeler");
+            Ui.WriteLine("  İki belgeyi yan yana koy. Çelişkiyi sana kimse söylemeyecek.\n",
+                         ConsoleColor.DarkGray);
+
+            foreach (var d in docs)
+            {
+                var f = DocumentDesk.Fields(v, d);
+                Ui.Write($"  {DocumentDesk.DocumentName(d),-18}", ConsoleColor.DarkCyan);
+                Ui.WriteLine($"{f.Count} satır", ConsoleColor.DarkGray);
+            }
+
+            if (k.ProvenContradictions.Count > 0)
+            {
+                Sys.WriteLine();
+                Ui.WriteLine($"  Kanıtladığın çelişki: {k.ProvenContradictions.Count}", ConsoleColor.Green);
+            }
+
+            int c = Ui.Menu("Ne yapıyorsun?", "Bir belgeyi oku", "İki belgeyi karşılaştır");
+            if (c == 0) return;
+
+            if (c == 1) ReadDocumentScreen(v);
+            else CompareDocumentsScreen(v, k, s);
+        }
+    }
+
+    private static void ReadDocumentScreen(VehicleInstance v)
+    {
+        var docs = Enum.GetValues<DocumentId>();
+        int c = Ui.Menu("Hangi belge?", docs.Select(DocumentDesk.DocumentName).ToArray());
+        if (c == 0) return;
+
+        var doc = docs[c - 1];
+        Ui.Clear();
+        Ui.Header(DocumentDesk.DocumentName(doc));
+
+        foreach (var f in DocumentDesk.Fields(v, doc))
+        {
+            Ui.Write($"    {f.Label,-32}", ConsoleColor.Gray);
+            Ui.WriteLine(f.Value, ConsoleColor.White);
+        }
+
+        Sys.WriteLine();
+        Ui.WriteLine("  Tek başına bir belge yalan söyleyebilir. Yalanı yakalamak için", ConsoleColor.DarkGray);
+        Ui.WriteLine("  başka bir belgeyle karşılaştırman gerekir.", ConsoleColor.DarkGray);
+        Ui.Pause();
+    }
+
+    private static void CompareDocumentsScreen(VehicleInstance v, PlayerKnowledge k, Seller? s)
+    {
+        var docs = Enum.GetValues<DocumentId>();
+
+        int c1 = Ui.Menu("Soldaki belge", docs.Select(DocumentDesk.DocumentName).ToArray());
+        if (c1 == 0) return;
+        var left = docs[c1 - 1];
+
+        // Aynı belge sağda da seçilebilir: servis defterinin KENDİ İÇİNDE
+        // tutarsız olması (km geriye gitmesi) geçerli bir çelişkidir.
+        int c2 = Ui.Menu("Sağdaki belge",
+            docs.Select(d => d == left
+                ? $"{DocumentDesk.DocumentName(d)}  (kendi içinde)"
+                : DocumentDesk.DocumentName(d)).ToArray());
+        if (c2 == 0) return;
+        var right = docs[c2 - 1];
+
+        var leftFields = DocumentDesk.Fields(v, left);
+        var rightFields = DocumentDesk.Fields(v, right);
+
+        Ui.Clear();
+        Ui.Header($"{DocumentDesk.DocumentName(left)}  ⟷  {DocumentDesk.DocumentName(right)}");
+
+        Ui.WriteLine($"  ── {DocumentDesk.DocumentName(left)} ──", ConsoleColor.DarkCyan);
+        for (int i = 0; i < leftFields.Count; i++)
+        {
+            Ui.Write($"    [{(char)('A' + i)}] {leftFields[i].Label,-30}", ConsoleColor.Gray);
+            Ui.WriteLine(leftFields[i].Value, ConsoleColor.White);
+        }
+
+        Sys.WriteLine();
+        Ui.WriteLine($"  ── {DocumentDesk.DocumentName(right)} ──", ConsoleColor.DarkCyan);
+        for (int i = 0; i < rightFields.Count; i++)
+        {
+            Ui.Write($"    [{i + 1}] {rightFields[i].Label,-30}", ConsoleColor.Gray);
+            Ui.WriteLine(rightFields[i].Value, ConsoleColor.White);
+        }
+
+        Sys.WriteLine();
+        Ui.WriteLine("  Çeliştiğini düşündüğün iki satırı seç (ör: A2). Boş bırak = vazgeç.",
+                     ConsoleColor.DarkGray);
+        Sys.Write("  İddian > ");
+        var input = Sys.ReadLine()?.Trim().ToUpperInvariant();
+
+        if (string.IsNullOrWhiteSpace(input) || input.Length < 2) return;
+
+        int li = input[0] - 'A';
+        if (!int.TryParse(input[1..], out int ri)) { return; }
+        ri -= 1;
+
+        if (li < 0 || li >= leftFields.Count || ri < 0 || ri >= rightFields.Count)
+        {
+            Ui.WriteLine("\n  Öyle bir satır yok.", ConsoleColor.Red);
+            Ui.Pause();
+            return;
+        }
+
+        var result = DocumentDesk.Challenge(v, k, leftFields[li], rightFields[ri]);
+        _player.AdvanceMinutes(8);
+
+        Sys.WriteLine();
+        if (result.IsContradiction)
+        {
+            Ui.WriteLine("  " + result.Verdict, ConsoleColor.Cyan);
+            Sys.WriteLine();
+            Ui.WriteLine("  " + Ui.Wrap(result.Explanation ?? "", 58, 2), ConsoleColor.White);
+
+            string id = $"{leftFields[li].Key}|{rightFields[ri].Key}";
+            if (k.ProvenContradictions.Add(id))
+            {
+                k.Observe(result.Explanation ?? result.Verdict, ObservationKind.Contradiction, MethodId.Belgeler);
+                Sys.WriteLine();
+                Ui.WriteLine("  Bu artık pazarlıkta kullanabileceğin bir koz.", ConsoleColor.Green);
+            }
+        }
+        else
+        {
+            Ui.WriteLine("  " + result.Verdict, ConsoleColor.DarkYellow);
+            if (result.Explanation is not null)
+                Ui.WriteLine("  " + Ui.Wrap(result.Explanation, 58, 2), ConsoleColor.Gray);
+
+            // Yanlış iddia bedava değil — yoksa oyuncu her kombinasyonu dener
+            if (s is not null)
+            {
+                s.PatienceRemaining = Math.Max(0, s.PatienceRemaining - 1);
+                Sys.WriteLine();
+                Ui.WriteLine($"  Satıcı belgeleri karıştırmandan sıkıldı. (sabır −1)", ConsoleColor.DarkGray);
+            }
+        }
+
+        Ui.Pause();
+    }
+
+    // =======================================================================
     // SATICIYA SORU
     // =======================================================================
 
@@ -504,6 +667,7 @@ internal static class Program
     private static bool NegotiateScreen(Listing l)
     {
         var (v, s, k) = (l.V, l.S, l.K);
+        var used = new HashSet<string>();
 
         while (true)
         {
@@ -512,13 +676,45 @@ internal static class Program
             Ui.Header("Pazarlık");
 
             Ui.WriteLine($"  {v.DisplayName}  ·  isteniyor {Ui.Money(v.AskingPrice)}", ConsoleColor.White);
-            Ui.WriteLine($"  Cebinde {Ui.Money(_player.Money)} var.\n", ConsoleColor.Gray);
+            Ui.WriteLine($"  Cebinde {Ui.Money(_player.Money)} var.", ConsoleColor.Gray);
 
             var (low, high, conf) = Valuation.EstimatedRepairBill(v, k);
             Ui.WriteLine($"  Tahmini onarım: {Ui.Money(low)} – {Ui.Money(high)} (güven %{conf * 100:F0})",
                          ConsoleColor.DarkYellow);
-            Sys.WriteLine();
 
+            if (s.ExtraConcession > 0m)
+                Ui.WriteLine($"  Kozlarla koparılan taviz: −{Ui.Money(s.ExtraConcession)}", ConsoleColor.Green);
+
+            Ui.Write("  Satıcının sabrı: ", ConsoleColor.DarkGray);
+            Ui.WriteLine(s.PatienceMood, s.PatienceRemaining <= 1 ? ConsoleColor.Red : ConsoleColor.Gray);
+
+            var kozlar = NegotiationEngine.Available(v, s, k)
+                .Where(x => !used.Contains(x.Id))
+                .ToList();
+
+            Sys.WriteLine();
+            if (kozlar.Count > 0)
+                Ui.WriteLine($"  Elinde {kozlar.Count} koz var — teşhis yapmanın karşılığı bu.",
+                             ConsoleColor.Cyan);
+            else
+                Ui.WriteLine("  Elinde hiç koz yok. İnceleme yapmadan pazarlık zayıf kalır.",
+                             ConsoleColor.DarkGray);
+
+            int c = Ui.Menu("Ne yapıyorsun?",
+                kozlar.Count > 0 ? $"Koz kullan ({kozlar.Count} adet)" : "Koz kullan (yok)",
+                "Rakam söyle");
+
+            if (c == 0) return false;
+
+            if (c == 1)
+            {
+                if (kozlar.Count == 0) { Ui.WriteLine("\n  Kullanacak kozun yok.", ConsoleColor.Red); Ui.Pause(); continue; }
+                PressLeverageScreen(v, s, kozlar, used);
+                if (s.WalkedAway) { l.Sold = true; return true; }
+                continue;
+            }
+
+            Sys.WriteLine();
             var offer = Ui.AskMoney("Teklifin (0 = vazgeç)");
             if (offer is null || offer <= 0) return false;
 
@@ -551,6 +747,65 @@ internal static class Program
             Ui.Pause();
             return true;
         }
+    }
+
+    /// <summary>
+    /// Kozu masaya koyma ekranı. Her koz bir kez kullanılabilir; satıcının
+    /// sabrını yer ve arketipe göre geri tepebilir.
+    /// </summary>
+    private static void PressLeverageScreen(
+        VehicleInstance v, Seller s, List<Leverage> kozlar, HashSet<string> used)
+    {
+        Ui.Clear();
+        Ui.Header("Kozlar");
+        Ui.WriteLine("  Bulduğun her şey masaya konabilir. Ama her koz satıcının sabrını yer.\n",
+                     ConsoleColor.DarkGray);
+
+        // Ağırlığı göster: oyuncu hangi kozu önce oynayacağına karar verebilmeli
+        var labels = kozlar.Select(x =>
+        {
+            string tag = x.MonetaryWeight >= 18_000m ? "AĞIR"
+                       : x.MonetaryWeight >= 7_000m ? "orta"
+                       : "hafif";
+            string text = x.Text.Length > 44 ? x.Text[..43] + "…" : x.Text;
+            return $"[{x.KindName,-15}|{tag,5}] {text}";
+        }).ToArray();
+
+        int c = Ui.Menu("Hangi kozu kullanıyorsun?", labels);
+        if (c == 0) return;
+
+        var lev = kozlar[c - 1];
+        used.Add(lev.Id);
+
+        Ui.Clear();
+        Ui.Header("Masaya koydun");
+        Ui.WriteLine("  Sen: \"" + Ui.Wrap(lev.Text, 55, 8) + "\"", ConsoleColor.White);
+        Sys.WriteLine();
+
+        var res = NegotiationEngine.Press(v, s, lev, _rng);
+        _player.AdvanceMinutes(4);
+
+        var color = res.SellerWalkedAway ? ConsoleColor.Red
+                  : res.Backfired ? ConsoleColor.DarkYellow
+                  : ConsoleColor.Green;
+
+        Ui.WriteLine("  " + s.Name + ": " + Ui.Wrap(res.SellerLine, 55, 4), color);
+
+        if (!res.Backfired && !res.SellerWalkedAway && res.ConcessionGained > 0m)
+        {
+            Sys.WriteLine();
+            Ui.WriteLine($"  Taban fiyat {Ui.Money(res.ConcessionGained)} düştü. Toplam taviz: " +
+                         $"{Ui.Money(s.ExtraConcession)}", ConsoleColor.Green);
+        }
+
+        if (res.Backfired)
+        {
+            Sys.WriteLine();
+            Ui.WriteLine("  Fazla üstüne gittin. Bu arketip baskıya iyi tepki vermiyor.",
+                         ConsoleColor.DarkYellow);
+        }
+
+        Ui.Pause();
     }
 
     // =======================================================================

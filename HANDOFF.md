@@ -2,7 +2,7 @@
 
 > Bu belge tamamen bağlamsız yeni bir oturum için yazıldı. Oyun içeriği ve README
 > Türkçedir; bu belge teknik aktarım olduğu için İngilizce/Türkçe karışıktır.
-> Son güncelleme: 2026-07-26 (EOF düzeltmesi).
+> Son güncelleme: 2026-07-26 (teşhis derinliği, kozlu pazarlık, belge masası).
 
 ---
 
@@ -122,7 +122,7 @@ A **playable simulation-core prototype** — no art, no Unity, no Blender. It ex
 answer the blueprint's own Faz 0 question, *"Kaputu açmak heyecan verici mi?"*,
 without spending money on a 3D artist.
 
-- ~3,200 lines of C#, .NET 10, builds clean with **0 warnings, 0 errors**
+- ~4,900 lines of C#, .NET 10, builds clean with **0 warnings, 0 errors**
 - Verified end to end by scripted playthrough (buy → repair → test drive → sell → reveal)
 - Builds and plays identically on macOS and Windows, with zero OS-specific code
 - The simulation core landed in `a7859a2`; for current history run `git log --oneline`
@@ -149,7 +149,11 @@ default PATH** — prefix commands with `export PATH="/opt/homebrew/bin:$PATH"`.
 | `src/Garaj.Core/Diagnosis.cs` | 11 diagnosis methods + `DocumentAnalyzer` cross-verification |
 | `src/Garaj.Core/Scams.cs` | 7 tamper types, `ScamEngine` (perceived condition, tells, km decay) |
 | `src/Garaj.Core/Generation.cs` | Layered procedural vehicle generation (blueprint §8.1) |
-| `src/Garaj.Core/Sellers.cs` | 6 archetypes, lies, tells, patience, negotiation |
+| `src/Garaj.Core/Sellers.cs` | 6 archetypes, patience, reserve price, `ProvenLiar` |
+| `src/Garaj.Core/Dialogue.cs` | Seller voice: 6 archetypes × 7 stances, part-specific answers |
+| `src/Garaj.Core/Flavor.cs` | ~130 sensory inspection lines, condition-banded per method |
+| `src/Garaj.Core/Negotiation.cs` | Findings become citable leverage; concessions, backfires |
+| `src/Garaj.Core/Documents.cs` | Papers Please document desk — player finds contradictions |
 | `src/Garaj.Core/Economy.cs` | Valuation, repair, sale, equipment, `PlayerState` |
 | `src/Garaj.Console/Program.cs` | Game loop and all screens |
 | `src/Garaj.Console/Ui.cs` | Confidence-band rendering, colours, menus |
@@ -183,6 +187,31 @@ impossible for a screen to leak the truth by accident. Preserve it in any Unity 
 - **Time bombs** — 8% of cars carry a defect undiscoverable before purchase (§4.4).
 - **Seller tells** — leaked when lying, but honest sellers also show false tells 12%
   of the time. Tells must never be 100% reliable.
+
+### Systems added 2026-07-26 (design invariants to preserve)
+
+- **Inspection flavor** (`Flavor.cs`) — each diagnosis method emits condition-banded
+  sensory lines (`ObservationKind.Detail`). These **do not reveal defects**; they are
+  raw material for the player's own inference. They read **perceived** condition, so
+  masking corrupts them too. Never let a flavor line state a defect outright — that
+  belongs to the reveal system.
+- **Seller dialogue** (`Dialogue.cs`) — 6 archetypes × 7 stances. The load-bearing case
+  is asking about a defect the player **already found**: the seller either concedes
+  (becomes negotiation leverage) or keeps denying it — a *proven* lie. `ProvenLiar` is
+  permanent and widens the seller's price flexibility.
+- **Leverage negotiation** (`Negotiation.cs`) — findings/contradictions/caught-masks/
+  proven-lies become citable leverage that lowers the seller's reserve. Each leverage is
+  single-use, costs patience, and can backfire on Duygusal/Aceleci archetypes. **This is
+  the payoff that makes diagnosis matter** — inspection buys negotiating power, not just
+  information. A valid leverage must never feel wasted (floor of ₺800 concession).
+- **Document desk** (`Documents.cs`) — the Papers Please mechanic. The game **does not
+  announce contradictions**; the player places two documents side by side and asserts
+  which fields clash. `MethodId.Belgeler` now only produces a vague "something doesn't
+  add up" hint (`DocumentAnalyzer.Skim`), never the answer. Wrong assertions cost time
+  and seller patience so the player can't brute-force every pair. The paint+tramer case
+  still requires the player to have run the paint gauge first (method combination).
+  `DocumentAnalyzer.FindContradictions` is retained but **unused** — do not wire it back
+  into gameplay; it would turn the desk's puzzle into a notification.
 
 ---
 
@@ -256,6 +285,8 @@ until it exists.
 | Profitable under selective repair | ~50% |
 | Margin on masked cars | must be **worse** than clean cars — otherwise scamming costs the player nothing |
 | Sale payout ÷ displayed market band | **1.00×**, and 0 cars out of band |
+| Cars with a catchable document contradiction | ~35–40% — below ~20% the document desk becomes dead content nobody opens |
+| Median asking price vs starting capital (₺60.000) | median must stay **under** capital, or the first purchase is impossible |
 
 The last row is a regression guard. `TrueMarketValue` once omitted the age factor that
 `RestoredValueBand` applied, so restored cars sold for 3–4× the band shown to the
@@ -272,7 +303,9 @@ is profitable, the game is broken.
    copied into the mockups) while part prices are realistic for 2026 (clutch kit
    ₺3.200). At that ratio full restoration costs ~3× the car's value and every vehicle
    is economic scrap. Car base values were raised to 2026 reality (Şahin ₺145.000) and
-   starting capital from ₺50.000 to ₺250.000.
+   starting capital (raised to ₺250.000 during bring-up, then deliberately
+   tightened to ₺60.000 so the first turn forces a choice between equipment and
+   the car itself — see the median-vs-capital balance target above).
 2. **Age treated as wear.** A 36-year-old car's parts are not 36 years old — worn parts
    get replaced when their service life ends; that is what maintenance *is*. Wear is now
    computed from km **on the individual part**, with maintenance quality modelling the

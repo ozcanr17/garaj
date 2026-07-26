@@ -4,16 +4,32 @@ namespace Garaj.Core;
 // EKİPMAN (blueprint §3.2 — kalıcı yatırım = ilerleme hissi)
 // ---------------------------------------------------------------------------
 
-public sealed record Equipment(string Id, string Name, decimal Cost, string Unlocks);
+public sealed record Equipment(string Id, string Name, decimal Cost, int Tier, string Unlocks);
 
 public static class EquipmentCatalog
 {
+    // Blueprint §3.2 kademelerini takip eder. Ekipman kalıcı yatırımdır ve
+    // ilerleme hissinin ana kaynağıdır: her alet yeni bir görme biçimi açar.
     public static IReadOnlyList<Equipment> All { get; } =
     [
-        new("obd",             "OBD Cihazı",            2_500m,  "Hata kodları + readiness monitor"),
-        new("boya_olcer",      "Boya Kalınlık Ölçer",   8_000m,  "Boyalı/değişen panel tespiti"),
-        new("endoskop",        "Endoskop Kamera",      12_000m,  "Silindir içi görüntüleme"),
-        new("kompresyon_seti", "Kompresyon Seti",      18_000m,  "Silindir sağlığı — en kesin motor testi"),
+        new("stetoskop",       "Mekanik Stetoskop",      1_200m, 1,
+            "Sesi kaynağında dinle — rulman, triger, supap"),
+        new("obd",             "OBD Cihazı",             2_500m, 1,
+            "Hata kodları + readiness monitor"),
+        new("boya_olcer",      "Boya Kalınlık Ölçer",    8_000m, 2,
+            "Boyalı/değişen panel tespiti (mikron)"),
+        new("endoskop",        "Endoskop Kamera",       12_000m, 3,
+            "Silindir içi, ulaşılamayan bölgeler"),
+        new("kompresyon_seti", "Kompresyon Seti",       18_000m, 3,
+            "Silindir sağlığı — motor yalan söyleyemez"),
+        new("leak_down",       "Sızdırmazlık Seti",     22_000m, 4,
+            "Kaçağın NEREDEN olduğunu ayırt eder: conta mı, segman mı, supap mı"),
+        new("termal_kamera",   "Termal Kamera",         25_000m, 4,
+            "Isı haritası — tıkalı radyatör, ısınan devre, soğuk silindir"),
+        new("lift",            "Lift",                  45_000m, 5,
+            "Alt takım incelemesi artık ücretsiz (aksi halde her seferinde ₺500)"),
+        new("pro_obd",         "Profesyonel OBD",       35_000m, 5,
+            "Modül-modül karşılaştırma — ECU'ya yazılmış sahte km buradan çıkar"),
     ];
 
     public static Equipment Get(string id) => All.First(e => e.Id == id);
@@ -223,7 +239,11 @@ public static class SaleEngine
 
 public sealed class PlayerState
 {
-    public decimal Money { get; set; } = 250_000m;
+    // 60.000₺ kasıtlı olarak dar. Medyan araç ~39.000₺ olduğu için oyuncu
+    // ilk turda ekipman ile araç bütçesi arasında seçim yapmak ZORUNDA.
+    // Bu kısıt oyunun gerilimini besliyor — rahat bir başlangıç sermayesi
+    // ilk 5 saatteki bütün kararları önemsizleştirir.
+    public decimal Money { get; set; } = 60_000m;
     public int Day { get; set; } = 1;
     public int Minutes { get; set; } = 9 * 60;   // 09:00
     public HashSet<string> Equipment { get; } = [];

@@ -39,6 +39,12 @@ public static class InspectionFlavor
     private static readonly MethodId[] Paint  = [MethodId.BoyaKalinlik];
     private static readonly MethodId[] Comp   = [MethodId.Kompresyon];
     private static readonly MethodId[] Scope  = [MethodId.Endoskop];
+    private static readonly MethodId[] Steth  = [MethodId.Stetoskop];
+    private static readonly MethodId[] Leak   = [MethodId.LeakDown];
+    private static readonly MethodId[] Therm  = [MethodId.TermalKamera];
+    private static readonly MethodId[] Pro    = [MethodId.ProOBD];
+    private static readonly MethodId[] OilLab = [MethodId.YagAnalizi];
+    private static readonly MethodId[] Frame  = [MethodId.SasiOlcum];
 
     public static IReadOnlyList<FlavorLine> All { get; } =
     [
@@ -144,6 +150,54 @@ public static class InspectionFlavor
         L(SystemGroup.Tekerlek, Bad, Poor, Lift, "Tekerleği elle çevirince poyra rulmanından uğultu geliyor."),
         L(SystemGroup.Tekerlek, Poor, Mid, Look, "Lastiklerde yarı ömür var, aşınma düzgün."),
         L(SystemGroup.Tekerlek, Mid, Good, Look, "Dört lastik de aynı marka ve DOT tarihleri yakın."),
+
+        // ============ ÜST KADEME ALETLER ============
+        // Her alet aynı gerçeğe FARKLI bir pencereden bakar. Aletin değeri
+        // "daha çok bilgi" değil, "başka türlü görülemeyecek bilgi"dir.
+
+        // --- Stetoskop ---
+        L(SystemGroup.Motor, Bad, Poor, Steth, "Ucu eksantrik kapağına dayayınca düzenli bir metalik tıkırtı duyuluyor."),
+        L(SystemGroup.Motor, Bad, Poor, Steth, "Triger kapağından gelen ses devirle birebir senkron — kayış veya gergi."),
+        L(SystemGroup.Motor, Poor, Mid, Steth, "Hafif bir supap sesi var ama düzenli; soğukken belirginleşiyor."),
+        L(SystemGroup.Motor, Mid, Good, Steth, "Blok üzerinde tek tük mekanik ses var, hepsi normal ritmde."),
+        L(SystemGroup.Sanziman, Bad, Poor, Steth, "Şanzıman gövdesinden hıza bağlı bir uğultu geliyor — rulman."),
+        L(SystemGroup.Tekerlek, Bad, Poor, Steth, "Poyra göbeğinde tekerlek dönerken artan bir hırıltı var."),
+        L(SystemGroup.Tekerlek, Poor, Mid, Steth, "Rulmanlardan hafif ses geliyor ama henüz belirgin değil."),
+
+        // --- Sızdırmazlık (leak-down) ---
+        L(SystemGroup.Motor, Bad, Poor, Leak, "Kaçak %40'ın üzerinde ve ses yağ doldurma kapağından geliyor — segmanlar."),
+        L(SystemGroup.Motor, Bad, Poor, Leak, "Hava egzozdan kaçıyor: egzoz supabı tam kapanmıyor."),
+        L(SystemGroup.Motor, Bad, Poor, Leak, "Radyatörden kabarcık çıkıyor — kapak contası yanmış."),
+        L(SystemGroup.Motor, Poor, Mid, Leak, "Kaçak %20 civarı; yaşına göre sınırda ama kabul edilebilir."),
+        L(SystemGroup.Motor, Mid, Good, Leak, "Dört silindirde de kaçak %10'un altında. Motor sızdırmıyor."),
+
+        // --- Termal kamera ---
+        L(SystemGroup.Sogutma, Bad, Poor, Therm, "Radyatörün alt üçte biri soğuk kalıyor — petekler tıkalı."),
+        L(SystemGroup.Sogutma, Poor, Mid, Therm, "Radyatör yüzeyinde birkaç soğuk leke var, kısmi tıkanma."),
+        L(SystemGroup.Sogutma, Mid, Good, Therm, "Radyatör baştan sona eşit ısınıyor."),
+        L(SystemGroup.Elektrik, Bad, Poor, Therm, "Sigorta kutusunda bir devre çevresine göre belirgin sıcak."),
+        L(SystemGroup.Elektrik, Bad, Poor, Therm, "Alternatör gövdesi olması gerekenden çok daha sıcak."),
+        L(SystemGroup.Motor, Bad, Poor, Therm, "Bir silindirin egzoz portu diğerlerinden soğuk — o silindir tam çalışmıyor."),
+        L(SystemGroup.Motor, Mid, Good, Therm, "Dört egzoz portu da aynı sıcaklıkta."),
+
+        // --- Profesyonel OBD ---
+        L(SystemGroup.Elektrik, Bad, Poor, Pro, "ABS modülü ile gösterge paneli arasında iletişim hatası kayıtlı."),
+        L(SystemGroup.Motor, Bad, Poor, Pro, "Motor modülünde silinmemiş donuk kare (freeze frame) verisi duruyor."),
+        L(SystemGroup.Sanziman, Bad, Poor, Pro, "Şanzıman modülü aşırı ısınma olayı kaydetmiş."),
+        L(SystemGroup.Elektrik, Mid, Good, Pro, "Tüm modüller birbiriyle tutarlı, kayıtlı olay yok."),
+
+        // --- Yağ analizi ---
+        L(SystemGroup.Motor, Bad, Poor, OilLab, "Raporda demir ve alüminyum partikül değerleri sınırın çok üstünde."),
+        L(SystemGroup.Motor, Bad, Poor, OilLab, "Yağda antifriz izi var — su ile yağ bir yerde buluşuyor."),
+        L(SystemGroup.Motor, Poor, Mid, OilLab, "Metal değerleri yüksek ama yaşına göre beklenen bantta."),
+        L(SystemGroup.Motor, Mid, Good, OilLab, "Partikül değerleri düşük. Motor içi temiz çalışıyor."),
+
+        // --- Şasi ölçümü ---
+        L(SystemGroup.Kaporta, Bad, Poor, Frame, "Ön sol şasi ayağı fabrika değerinden 14 mm sapmış."),
+        L(SystemGroup.Kaporta, Bad, Poor, Frame, "Ölçüm raporunda arka panelde kaynak izleri işaretlenmiş."),
+        L(SystemGroup.Kaporta, Poor, Mid, Frame, "Şasi genel olarak düzgün, bir noktada 3 mm sapma var."),
+        L(SystemGroup.Kaporta, Mid, Good, Frame, "Şasi tüm noktalarda fabrika toleransında."),
+        L(SystemGroup.Suspansiyon, Bad, Poor, Frame, "Süspansiyon bağlantı noktaları simetrik değil — araç bir yana çekecek."),
     ];
 
     /// <summary>

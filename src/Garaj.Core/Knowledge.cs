@@ -128,6 +128,10 @@ public sealed class PlayerKnowledge
     private readonly Dictionary<string, ConfidenceRange> _parts = [];
 
     public HashSet<string> DiscoveredDefects { get; } = [];
+
+    /// <summary>Belge masasında oyuncunun KENDİ bulduğu çelişkiler.</summary>
+    public HashSet<string> ProvenContradictions { get; } = [];
+
     public List<Observation> Observations { get; } = [];
     public HashSet<MethodId> MethodsUsed { get; } = [];
     public decimal SpentOnDiagnosis { get; set; }

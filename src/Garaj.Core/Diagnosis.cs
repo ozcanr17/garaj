@@ -79,6 +79,40 @@ public static class MethodCatalog
             [],
             1, true, null,
             "Ruhsat, servis defteri, tramer kaydı. Yan yana koy ve karşılaştır."),
+
+        // ---------------- ÜST KADEME EKİPMAN ----------------
+
+        new(MethodId.Stetoskop, "Stetoskopla dinleme", 0m, 15, 0.62f,
+            [SystemGroup.Motor, SystemGroup.Sanziman, SystemGroup.Tekerlek],
+            2, true, "stetoskop",
+            "Ucu bloğa dayıyorsun. Gürültü kayboluyor, geriye tek bir ses kalıyor."),
+
+        new(MethodId.LeakDown, "Sızdırmazlık testi", 1_200m, 25, 0.90f,
+            [SystemGroup.Motor],
+            4, true, "leak_down",
+            "Silindire basınçlı hava veriyorsun. Kaçak varsa NEREDEN kaçtığını duyuyorsun."),
+
+        new(MethodId.TermalKamera, "Termal kamera", 0m, 10, 0.72f,
+            [SystemGroup.Elektrik, SystemGroup.Sogutma, SystemGroup.Motor],
+            2, true, "termal_kamera",
+            "Ekranda ısı haritası. Tıkalı petek, ısınan devre, çalışmayan silindir."),
+
+        new(MethodId.ProOBD, "Profesyonel OBD + kodlama", 0m, 20, 0.80f,
+            [SystemGroup.Motor, SystemGroup.Elektrik, SystemGroup.Sanziman],
+            3, true, "pro_obd",
+            "Her modüle tek tek bağlanıyorsun. Modüller birbirini tutmuyorsa ortaya çıkar."),
+
+        // ---------------- DIŞ SERVİS ----------------
+
+        new(MethodId.YagAnalizi, "Yağ analizi (laboratuvar)", 800m, 120, 0.84f,
+            [SystemGroup.Motor],
+            2, true, null,
+            "Numune alıp laboratuvara yolluyorsun. Metal partiküller iç aşınmayı ele verir."),
+
+        new(MethodId.SasiOlcum, "Şasi ölçümü (dış servis)", 3_000m, 240, 0.88f,
+            [SystemGroup.Kaporta, SystemGroup.Suspansiyon],
+            4, true, null,
+            "Araç ölçüm tezgahına çekiliyor. Şasi milimetrik olarak taranıyor."),
     ];
 
     private static readonly Dictionary<MethodId, DiagnosisMethod> _byId = All.ToDictionary(m => m.Id);
@@ -160,9 +194,12 @@ public static class DiagnosisEngine
         foreach (var obs in ScamEngine.RollExposures(v, m.Id)) result.Observations.Add(obs);
         foreach (var obs in ScamEngine.RollTells(v, m.Id, rng)) result.Observations.Add(obs);
 
-        // --- 5. Belge çapraz doğrulaması ---
+        // --- 5. Belgelere göz atma ---
+        // DİKKAT: burası çelişkiyi SÖYLEMEZ. Sadece "bir şey tutmuyor" hissi verir.
+        // Çelişkiyi oyuncu belge masasında kendi bulmalı (bkz. DocumentDesk).
+        // Cevabı burada vermek, oyunun en zeki mekaniğini bir bildirim satırına çevirir.
         if (m.Id == MethodId.Belgeler)
-            result.Observations.AddRange(DocumentAnalyzer.FindContradictions(v, k));
+            result.Observations.AddRange(DocumentAnalyzer.Skim(v, rng));
 
         // --- 6. Gerçekten hiçbir şey yoksa bunu da söyle (yokluk da bilgidir) ---
         if (result.Observations.Count == 0)
@@ -185,6 +222,63 @@ public static class DiagnosisEngine
 
 public static class DocumentAnalyzer
 {
+    /// <summary>
+    /// Belgelere hızlı göz atma. Çelişki VARSA bunu sezdirir ama NE olduğunu
+    /// söylemez — oyuncuyu masaya yönlendirir. Yoksa yanlış bir güven verir.
+    /// </summary>
+    public static List<Observation> Skim(VehicleInstance v, Random rng)
+    {
+        var found = new List<Observation>();
+        var docs = v.Documents;
+
+        int maxServiceKm = docs.ServiceHistory.Count > 0 ? docs.ServiceHistory.Max(s => s.Km) : 0;
+        bool kmProblem = maxServiceKm > v.OdometerReading;
+        bool engineProblem = !string.IsNullOrEmpty(docs.RuhsatEngineNumber)
+                             && docs.RuhsatEngineNumber != v.EngineNumber;
+        bool yearProblem = docs.RuhsatModelYear != v.ModelYear;
+
+        int problems = (kmProblem ? 1 : 0) + (engineProblem ? 1 : 0) + (yearProblem ? 1 : 0);
+
+        // Envanter — bunlar bilgi, çelişki değil
+        if (docs.ServiceHistory.Count == 0)
+            found.Add(new Observation(
+                "Servis geçmişi hiç yok. Bu tek başına kanıt değil ama bilinmeyeni büyütüyor.",
+                ObservationKind.Detail, MethodId.Belgeler));
+        else
+            found.Add(new Observation(
+                $"Serviste {docs.ServiceHistory.Count} kayıt var, en eskisi {docs.ServiceHistory.Min(s => s.Year)}.",
+                ObservationKind.Detail, MethodId.Belgeler));
+
+        found.Add(new Observation(
+            docs.TramerRecords.Count == 0
+                ? "Tramer kaydı temiz görünüyor."
+                : $"Tramerde {docs.TramerRecords.Count} hasar kaydı var.",
+            ObservationKind.Detail, MethodId.Belgeler));
+
+        if (docs.OwnerCount >= 6)
+            found.Add(new Observation(
+                $"{docs.OwnerCount} el değişmiş. Kimse elinde tutmak istememiş.",
+                ObservationKind.Detail, MethodId.Belgeler));
+
+        // Sezgi — ne olduğunu SÖYLEMEZ
+        if (problems > 0 && Rng.Chance(rng, 0.75f))
+        {
+            found.Add(new Observation(
+                problems > 1
+                    ? "Kâğıtlarda bir şeyler oturmuyor. Birden fazla yerde bir tuhaflık var — " +
+                      "ama üstünkörü bakışla ne olduğunu çıkaramıyorsun."
+                    : "Bir şey gözüne takıldı ama tam yakalayamadın. Belgeleri masaya yayıp " +
+                      "yan yana koymak gerek.",
+                ObservationKind.Suspicion, MethodId.Belgeler));
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// Otomatik çapraz doğrulama. ARTIK OYUNDA KULLANILMIYOR — oyuncu çelişkiyi
+    /// belge masasında kendi bulur. Referans ve test amacıyla duruyor.
+    /// </summary>
     public static List<Observation> FindContradictions(VehicleInstance v, PlayerKnowledge k)
     {
         var found = new List<Observation>();

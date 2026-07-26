@@ -19,7 +19,11 @@ public enum PartOrigin { OEM, Aftermarket, Used, Refurbished, Counterfeit }
 public enum MethodId
 {
     Gozle, Dokunma, Calistir, TestSurusuKisa, TestSurusuUzun,
-    OBD, BoyaKalinlik, Lift, Kompresyon, Endoskop, Belgeler
+    OBD, BoyaKalinlik, Lift, Kompresyon, Endoskop, Belgeler,
+    // Üst kademe ekipman
+    Stetoskop, LeakDown, TermalKamera, ProOBD,
+    // Dış servis — ekipman gerekmez, para ve zaman ister
+    YagAnalizi, SasiOlcum
 }
 
 public enum OwnerProfile
