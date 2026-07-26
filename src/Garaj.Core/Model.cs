@@ -80,8 +80,8 @@ public static class PartCatalog
         All =
         [
             // ---- MOTOR ----
-            P("motor_blok",     "Motor Bloğu",              SystemGroup.Motor,    18000m, 20f, 0.35f),
-            P("silindir_kapak", "Silindir Kapağı",          SystemGroup.Motor,     6500m,  8f, 0.55f),
+            P("motor_blok",     "Motor Bloğu",              SystemGroup.Motor,    18000m, 20f, 0.35f, "silindir_kapak"),
+            P("silindir_kapak", "Silindir Kapağı",          SystemGroup.Motor,     6500m,  8f, 0.55f, "triger_kayis", "enjektor"),
             P("kapak_conta",    "Silindir Kapak Contası",   SystemGroup.Motor,      850m,  6f, 0.90f, "silindir_kapak"),
             P("triger_kayis",   "Triger Kayışı",            SystemGroup.Motor,      600m,  3f, 1.40f),
             P("devirdaim",      "Devirdaim (Su Pompası)",   SystemGroup.Motor,      900m,  3f, 1.00f, "triger_kayis"),
@@ -91,7 +91,7 @@ public static class PartCatalog
             P("yag_filtresi",   "Yağ Filtresi",             SystemGroup.Motor,      180m,  0.5f, 1.80f),
 
             // ---- ŞANZIMAN ----
-            P("debriyaj",       "Debriyaj Seti",            SystemGroup.Sanziman,  3200m,  6f, 1.20f),
+            P("debriyaj",       "Debriyaj Seti",            SystemGroup.Sanziman,  3200m,  6f, 1.20f, "sanziman"),
             P("sanziman",       "Şanzıman",                 SystemGroup.Sanziman, 12000m, 10f, 0.45f),
 
             // ---- SOĞUTMA ----
@@ -200,6 +200,12 @@ public sealed class PartInstance
     public List<Defect> Defects { get; } = [];
     public bool IsSeized { get; set; }
     public int InstalledAtKm { get; set; }
+
+    /// <summary>
+    /// Cıvataların gerçek durumu. GİZLİ ve fiziksel bir gerçek — söküme
+    /// başlayana kadar bilinmez. Bir kez atanınca sabit kalır (bkz. Disassembly).
+    /// </summary>
+    public BoltState? Bolts { get; set; }
 
     public PartDefinition Def => PartCatalog.Get(DefId);
 

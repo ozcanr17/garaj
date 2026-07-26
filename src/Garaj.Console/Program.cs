@@ -876,40 +876,175 @@ internal static class Program
             {
                 var b = k.For(p.Id);
                 decimal est = p.IsReplaceable ? p.PartCost : p.PartCost + 1_500m;
-                return $"{p.Name,-24} inanç {b.Min:F0}-{b.Max:F0}   ~{Ui.Money(est),9}  {p.LaborHours:F1} saat";
+                int blockers = Disassembly.RemovalChain(p.Id).Count;
+                string dep = blockers > 0 ? $"  ↳{blockers} parça sökülmeli" : "";
+                return $"{p.Name,-22} inanç {b.Min:F0}-{b.Max:F0}  ~{Ui.Money(est),9}{dep}";
             }).ToArray();
 
             int c = Ui.Menu("Hangi parça?", labels);
             if (c == 0) return;
 
-            var pick = repairable[c - 1];
-            var result = RepairEngine.Repair(v, pick.Id, _rng);
+            DoRepairJob(v, k, repairable[c - 1]);
+        }
+    }
+
+    /// <summary>
+    /// Tam bir onarım işi: söküm zinciri → cıvatalar → onarım → montaj/tork.
+    /// Geri alınamazlık burada yaşıyor — sıyrılan cıvata kalıcıdır.
+    /// </summary>
+    private static void DoRepairJob(VehicleInstance v, PlayerKnowledge k, PartDefinition target)
+    {
+        decimal partCost = v.Part(target.Id).TrueRepairCost();
+        if (_player.Money < partCost)
+        {
+            Ui.WriteLine($"\n  Bu iş kabaca {Ui.Money(partCost)} tutar, paran yetmiyor. Önce sat.",
+                         ConsoleColor.Red);
+            Ui.Pause();
+            return;
+        }
+
+        // Sökülecekler: önce engeller (bağımlılık sırası), sonra hedefin kendisi
+        var chain = Disassembly.RemovalChain(target.Id);
+        var toRemove = chain.Select(id => v.Part(id)).Append(v.Part(target.Id)).ToList();
+
+        decimal jobCost = 0m;
+        int jobMinutes = 0;
+
+        Ui.Clear();
+        Ui.Header($"Söküm — hedef: {target.Name}");
+        if (chain.Count > 0)
+        {
+            Ui.WriteLine("  Bu parçaya ulaşmak için önce şunları sökmen gerek:", ConsoleColor.DarkGray);
+            foreach (var id in chain)
+                Ui.WriteLine($"    → {PartCatalog.Get(id).Name}", ConsoleColor.Gray);
+            Sys.WriteLine();
+        }
+
+        // --- SÖKÜM: her parça bir cıvata kararı ---
+        foreach (var part in toRemove)
+        {
+            if (!RemoveOnePart(part, ref jobCost, ref jobMinutes)) return;   // vazgeçti
+        }
+
+        // --- ONARIM ---
+        var (repCost, repHours, repMsg) = RepairEngine.Repair(v, target.Id, _rng);
+        jobCost += repCost;
+        jobMinutes += (int)(repHours * 60);
+
+        Ui.Clear();
+        Ui.Header("Onarım");
+        Ui.WriteLine("  " + repMsg, ConsoleColor.Green);
+        Ui.WriteLine($"  Parça/işçilik: {Ui.Money(repCost)}", ConsoleColor.DarkGray);
+        Ui.Pause();
+
+        // --- MONTAJ / TORK (sökülen her parça geri takılır) ---
+        bool hasWrench = _player.Has("tork_anahtari");
+        MontajStep(v, toRemove, hasWrench, ref jobMinutes);
+
+        // --- HESAP ---
+        _player.Money -= jobCost;
+        _player.RepairSpend += jobCost;
+        _player.AdvanceMinutes(jobMinutes);
+        k.Update(target.Id, new ConfidenceRange(86f, 97f, ConfidenceRange.MaxConfidence));
+
+        Ui.Clear();
+        Ui.Header("İş bitti");
+        Ui.WriteLine($"  {target.Name} tamamlandı.", ConsoleColor.Green);
+        Ui.WriteLine($"  Toplam maliyet: {Ui.Money(jobCost)}", ConsoleColor.White);
+        Ui.WriteLine($"  Toplam süre: {jobMinutes / 60} saat {jobMinutes % 60} dk", ConsoleColor.Gray);
+        Ui.Pause();
+    }
+
+    /// <summary>Bir parçayı söker; cıvata durumuna göre yöntem seçtirir. false = vazgeçti.</summary>
+    private static bool RemoveOnePart(PartInstance part, ref decimal jobCost, ref int jobMinutes)
+    {
+        while (true)
+        {
+            var state = Disassembly.BoltsFor(part, _rng);
+
+            // Temiz cıvata: karar gerektirmez, otomatik geç
+            if (state == BoltState.Temiz)
+            {
+                var auto = Disassembly.TryRemove(part, WrenchApproach.Normal, _rng);
+                jobCost += auto.Cost;
+                jobMinutes += auto.Minutes;
+                return true;
+            }
+
+            Ui.Clear();
+            Ui.Header($"Cıvata — {part.Def.Name}");
+            Ui.Write("  Cıvata durumu: ", ConsoleColor.DarkGray);
+            Ui.WriteLine(Disassembly.BoltName(state),
+                state == BoltState.Sikismis ? ConsoleColor.Red
+              : state == BoltState.Siyrik ? ConsoleColor.Red : ConsoleColor.DarkYellow);
+            Sys.WriteLine();
+
+            var opts = Disassembly.Options(state);
+            var labels = opts.Select(a =>
+            {
+                var (m, cst) = Disassembly.Effort(a);
+                float risk = Disassembly.StripRisk(state, a);
+                string riskTxt = a == WrenchApproach.DrillHelicoil ? "kesin çözüm"
+                               : risk <= 0.05f ? "güvenli"
+                               : risk < 0.20f ? "az riskli"
+                               : risk < 0.40f ? "riskli" : "ÇOK RİSKLİ";
+                string cstTxt = cst > 0 ? Ui.Money(cst) : "—";
+                return $"{Disassembly.ApproachName(a),-34} {riskTxt,-11} +{m,3}dk  {cstTxt}";
+            }).ToArray();
+
+            int c = Ui.Menu("Nasıl sökeceksin? (0 = işten vazgeç)", labels);
+            if (c == 0) return false;
+
+            var outcome = Disassembly.TryRemove(part, opts[c - 1], _rng);
+            jobCost += outcome.Cost;
+            jobMinutes += outcome.Minutes;
 
             Sys.WriteLine();
-            if (!result.Success)
-            {
-                Ui.WriteLine("  " + result.Message, ConsoleColor.DarkGray);
-                Ui.Pause();
-                continue;
-            }
-
-            if (_player.Money < result.Cost)
-            {
-                Ui.WriteLine($"  Bu iş {Ui.Money(result.Cost)} tutuyor, paran yetmiyor.", ConsoleColor.Red);
-                Ui.Pause();
-                continue;
-            }
-
-            _player.Money -= result.Cost;
-            _player.RepairSpend += result.Cost;
-            _player.AdvanceMinutes((int)(result.Hours * 60));
-
-            Ui.WriteLine("  " + result.Message, result.BoltStripped ? ConsoleColor.DarkYellow : ConsoleColor.Green);
-            Ui.WriteLine($"  {Ui.Money(result.Cost)}  ·  {result.Hours:F1} saat", ConsoleColor.DarkGray);
-
-            k.Update(pick.Id, new ConfidenceRange(86f, 97f, ConfidenceRange.MaxConfidence));
+            Ui.WriteLine("  " + Ui.Wrap(outcome.Message, 58, 2),
+                outcome.Stripped ? ConsoleColor.Red : ConsoleColor.Green);
             Ui.Pause();
+
+            if (outcome.Removed) return true;
+            // Sıyrıldı → döngü tekrar, artık sadece helicoil seçeneği var
         }
+    }
+
+    private static void MontajStep(
+        VehicleInstance v, List<PartInstance> parts, bool hasWrench, ref int jobMinutes)
+    {
+        TorqueChoice choice = TorqueChoice.Normal;
+
+        if (!hasWrench)
+        {
+            Ui.Clear();
+            Ui.Header("Montaj — tork");
+            Ui.WriteLine("  Tork anahtarın yok. Cıvataları göz kararı sıkacaksın.", ConsoleColor.DarkGray);
+            Ui.WriteLine("  Az sıkarsan gevşer, fazla sıkarsan diş zorlar — ikisi de yolda çıkar.\n",
+                         ConsoleColor.DarkGray);
+
+            int c = Ui.Menu("Nasıl sıkıyorsun?",
+                "Dikkatli, yavaş (en güvenli göz kararı)",
+                "Normal",
+                "Hızlı, olsun bitsin");
+            choice = c switch { 1 => TorqueChoice.Dikkatli, 3 => TorqueChoice.Hizli, _ => TorqueChoice.Normal };
+            jobMinutes += choice == TorqueChoice.Dikkatli ? 20 : choice == TorqueChoice.Hizli ? 5 : 10;
+        }
+
+        Ui.Clear();
+        Ui.Header("Montaj");
+        bool anyFlaw = false;
+        foreach (var part in parts)
+        {
+            var (msg, flaw) = Disassembly.Torque(part, choice, hasWrench, _rng);
+            if (flaw) { anyFlaw = true; Ui.WriteLine("  " + Ui.Wrap(msg, 58, 2), ConsoleColor.DarkYellow); }
+        }
+
+        if (!anyFlaw)
+            Ui.WriteLine("  Her şey yerine oturdu, tork tuttu.", ConsoleColor.Green);
+        else
+            Ui.WriteLine("\n  Bazı bağlantılar tam tutmadı. Test sürüşünde belli olur.", ConsoleColor.DarkYellow);
+
+        Ui.Pause();
     }
 
     private static void TestDrive(VehicleInstance v, PlayerKnowledge k)

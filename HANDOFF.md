@@ -2,7 +2,7 @@
 
 > Bu belge tamamen bağlamsız yeni bir oturum için yazıldı. Oyun içeriği ve README
 > Türkçedir; bu belge teknik aktarım olduğu için İngilizce/Türkçe karışıktır.
-> Son güncelleme: 2026-07-26 (teşhis derinliği, kozlu pazarlık, belge masası).
+> Son güncelleme: 2026-07-26 (söküm + cıvata mekaniği; geri alınamazlık direği).
 
 ---
 
@@ -122,7 +122,7 @@ A **playable simulation-core prototype** — no art, no Unity, no Blender. It ex
 answer the blueprint's own Faz 0 question, *"Kaputu açmak heyecan verici mi?"*,
 without spending money on a 3D artist.
 
-- ~4,900 lines of C#, .NET 10, builds clean with **0 warnings, 0 errors**
+- ~5,300 lines of C#, .NET 10, builds clean with **0 warnings, 0 errors**
 - Verified end to end by scripted playthrough (buy → repair → test drive → sell → reveal)
 - Builds and plays identically on macOS and Windows, with zero OS-specific code
 - The simulation core landed in `a7859a2`; for current history run `git log --oneline`
@@ -154,6 +154,7 @@ default PATH** — prefix commands with `export PATH="/opt/homebrew/bin:$PATH"`.
 | `src/Garaj.Core/Flavor.cs` | ~130 sensory inspection lines, condition-banded per method |
 | `src/Garaj.Core/Negotiation.cs` | Findings become citable leverage; concessions, backfires |
 | `src/Garaj.Core/Documents.cs` | Papers Please document desk — player finds contradictions |
+| `src/Garaj.Core/Disassembly.cs` | Dependency-graph teardown, bolt states, strip/helicoil, torque |
 | `src/Garaj.Core/Economy.cs` | Valuation, repair, sale, equipment, `PlayerState` |
 | `src/Garaj.Console/Program.cs` | Game loop and all screens |
 | `src/Garaj.Console/Ui.cs` | Confidence-band rendering, colours, menus |
@@ -212,6 +213,19 @@ impossible for a screen to leak the truth by accident. Preserve it in any Unity 
   still requires the player to have run the paint gauge first (method combination).
   `DocumentAnalyzer.FindContradictions` is retained but **unused** — do not wire it back
   into gameplay; it would turn the desk's puzzle into a notification.
+- **Disassembly + bolt mechanics** (`Disassembly.cs`) — the second pillar, *irreversibility*
+  (§6.1), finally in gameplay. To repair a part you must first remove everything blocking
+  it (`PartDefinition.RequiresRemoved`, transitive). Each removal reveals a hidden bolt
+  state (temiz/paslı/sıkışmış); the wrong approach **strips** the bolt, which is permanent
+  — the only recovery is drill+helicoil (+2h, +₺500). Reassembly torque without a torque
+  wrench can seed a future-surfacing defect. **Invariants:** bolt state is a hidden physical
+  fact stored once on `PartInstance.Bolts` (never re-roll on re-entry); a stripped bolt must
+  stay stripped; clean bolts auto-resolve so simple repairs stay one-tap. The ₺1.500 torque
+  wrench removes torque risk — it's the cheap early upgrade the reassembly step teaches you
+  to want. **Balance watch:** without the wrench, a multi-part teardown rolls a torque flaw
+  per reinstalled part (Dikkatli 12% each), so deep jobs compound risk — intended, but if
+  playtesting says early game feels punishing, lower the `Disassembly.Torque` flaw chances
+  before touching anything else.
 
 ---
 

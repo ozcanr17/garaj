@@ -12,6 +12,8 @@ public static class EquipmentCatalog
     // ilerleme hissinin ana kaynağıdır: her alet yeni bir görme biçimi açar.
     public static IReadOnlyList<Equipment> All { get; } =
     [
+        new("tork_anahtari",   "Tork Anahtarı",          1_500m, 1,
+            "Montajda tork riskini kaldırır — cıvatalar hep ayarında"),
         new("stetoskop",       "Mekanik Stetoskop",      1_200m, 1,
             "Sesi kaynağında dinle — rulman, triger, supap"),
         new("obd",             "OBD Cihazı",             2_500m, 1,
@@ -150,45 +152,28 @@ public static class Valuation
 
 public static class RepairEngine
 {
-    public sealed record RepairResult(
-        bool Success, decimal Cost, float Hours, string Message, bool BoltStripped);
-
     /// <summary>
-    /// Bir parçayı onar. Sıkışmış cıvata riski var (blueprint §6.1) — zorlarsan
-    /// sıyrılır ve maliyet artar. Geri alınamazlık ilkesi.
+    /// Bir parçanın durumunu onarır — parça/onarım bedeli döner.
+    /// Söküm ve cıvata mekaniği ARTIK burada değil (bkz. Disassembly); bu metot
+    /// sadece parça hedefe ulaşıldıktan sonra çağrılır ve durumu yeniler.
     /// </summary>
-    public static RepairResult Repair(VehicleInstance v, string partId, Random rng)
+    public static (decimal Cost, float Hours, string Message) Repair(
+        VehicleInstance v, string partId, Random rng)
     {
         var part = v.Part(partId);
         var def = part.Def;
 
         decimal cost = part.TrueRepairCost();
-        if (cost == 0m)
-            return new RepairResult(false, 0m, 0f, $"{def.Name} zaten iyi durumda. Dokunma.", false);
-
         float hours = def.LaborHours;
-        bool stripped = false;
 
-        // Sıkışmış cıvata: %35 sıyırma riski
-        if (part.IsSeized && Rng.Chance(rng, 0.35f))
-        {
-            stripped = true;
-            cost += 500m;
-            hours += 2f;
-        }
-
-        // Onarım gerçekleşir: parça yenilenir, kusurlar gider
         part.Condition = def.IsReplaceable ? Rng.Range(rng, 88f, 97f) : Rng.Range(rng, 72f, 88f);
         part.Defects.Clear();
         part.IsSeized = false;
         part.InstalledAtKm = v.TrueOdometer;
         part.Origin = PartOrigin.Aftermarket;
 
-        string msg = stripped
-            ? $"{def.Name} yenilendi — ama bir cıvata sıyrıldı. Delip helicoil taktın. (+₺500, +2 saat)"
-            : $"{def.Name} yenilendi.";
-
-        return new RepairResult(true, Math.Round(cost, 0), hours, msg, stripped);
+        return (Math.Round(cost, 0), hours,
+            def.IsReplaceable ? $"{def.Name} yenisiyle değiştirildi." : $"{def.Name} elden geçirildi.");
     }
 }
 
