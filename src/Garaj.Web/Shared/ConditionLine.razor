@@ -1,0 +1,33 @@
+@{
+    var (left, width) = UiFormat.BarGeometry(Range);
+    var fillClass = UiFormat.BarFillClass(Range);
+    var colorClass = UiFormat.ColorClass(Range);
+}
+<div class="cond-line">
+    <span class="cond-label">@Label</span>
+    <div class="cond-bar">
+        @if (Range.IsUnexamined)
+        {
+            <div class="fill unexamined"></div>
+        }
+        else
+        {
+            <div class="fill @fillClass" style="left:@(left)%;width:@(width)%"></div>
+        }
+    </div>
+    <span class="cond-verdict @colorClass">
+        @if (Range.IsUnexamined)
+        {
+            <text>incelenmedi</text>
+        }
+        else
+        {
+            <text>@Range.Min.ToString("F0")-@Range.Max.ToString("F0") · @Range.Phrase (%@((int)(Range.Confidence * 100)))</text>
+        }
+    </span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter, EditorRequired] public ConfidenceRange Range { get; set; }
+}

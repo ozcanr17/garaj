@@ -1,0 +1,12 @@
+@* OnClick must be bound from the parent (Game.razor), not called on GameState
+   directly here: Blazor only auto-re-renders the component that owns the
+   @onclick handler, and Game.razor is the one reading State.Current. Binding
+   OnClick="State.Back" from Game.razor's markup makes Game.razor the
+   EventCallback receiver, so it re-renders after the click too. *@
+<div class="backbar">
+    <button class="btn" @onclick="OnClick">Geri</button>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public EventCallback OnClick { get; set; }
+}

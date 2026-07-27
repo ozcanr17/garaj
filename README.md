@@ -15,6 +15,28 @@ dotnet run --project src/Garaj.Console -- 12345     # sabit seed ile oyna
 dotnet run --project src/Garaj.Console -- --balance 1000 7   # ekonomi denge raporu
 ```
 
+### Web / mobil (`Garaj.Web`)
+
+Aynı `Garaj.Core` üzerine kurulu bir Blazor WebAssembly istemcisi, mobilde ve
+masaüstü tarayıcıda dokunmatik dostu bir arayüzle oynanabilir hâle getiriyor.
+Konsol UI'ı taşınmadı — ekranlar bu proje için sıfırdan, buton/dokunma odaklı
+yazıldı; oyun mantığının tamamı yine `Garaj.Core`'da.
+
+```bash
+dotnet run --project src/Garaj.Web --urls http://0.0.0.0:5217
+```
+
+Sonra:
+
+- **Bu makineden**: `http://localhost:5217`
+- **Telefondan (aynı Wi‑Fi)**: bilgisayarın yerel IP'siyle, ör. `http://192.168.1.23:5217`
+  (`0.0.0.0` yerine gerçek makine IP'sini kullanmak istersen `ipconfig`/`ifconfig` ile bul)
+- Uzak/konteynerli bir ortamdaysan bir tünel (ör. `ngrok http 5217`) telefondan
+  erişim için gerekir.
+
+`Garaj.Web` tamamen istemci tarafında (WASM) çalışır — sunucu sadece statik
+dosya sunar, oyun durumu tarayıcıda tutulur (sayfa yenilenince sıfırlanır).
+
 ## Mimarinin tek kuralı
 
 > **Aracın GERÇEĞİ ile oyuncunun İNANDIĞI şey iki ayrı nesnedir.**

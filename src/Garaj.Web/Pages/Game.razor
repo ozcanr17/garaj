@@ -1,0 +1,728 @@
+@page "/"
+@using Garaj.Web.Shared
+@inject GameState State
+
+@if (State.Current == GameState.Screen.Intro)
+{
+    <div class="screen center" style="justify-content:center;min-height:100vh;">
+        <div class="stack">
+            <div class="header" style="border:none;font-size:1.8rem;letter-spacing:.3em;">GARAJ</div>
+            <p class="subtle">Simülasyon çekirdeği — oynanabilir prototip</p>
+            <p class="subtle">Babandan kalan garajda ₺60.000 sermayen var.<br />
+                Bir araç al, ne aldığını çözmeye çalış, onar, sat.</p>
+            <p class="quote">Hiçbir sayı kesin değildir. Hiçbir satıcı tam dürüst değildir.<br />
+                Gördüğün her bant GERÇEK değil, senin İNANDIĞIN şeydir.</p>
+            <button class="btn primary" @onclick="() => State.StartNewGame()">Başla</button>
+        </div>
+    </div>
+}
+else if (State.Current == GameState.Screen.Closed)
+{
+    <div class="screen center" style="justify-content:center;min-height:100vh;">
+        <p class="subtle">Kepenkleri indirdin.</p>
+        <button class="btn" @onclick="() => State.StartNewGame()">Yeniden başla</button>
+    </div>
+}
+else if (State.Current == GameState.Screen.Event)
+{
+    <StatusBar />
+    <div class="screen">
+        <h2 class="header">OLAY · @State.EventCategoryName(State.CurrentEvent!.Category)</h2>
+        <p class="quote">@State.CurrentEvent!.Title</p>
+        <p class="subtle">@State.CurrentEvent!.Body</p>
+        <div class="menu">
+            @foreach (var choice in State.CurrentEvent!.Choices)
+            {
+                <button class="btn" @onclick="() => State.PickEventChoice(choice)">@choice.Label</button>
+            }
+        </div>
+    </div>
+}
+else if (State.Current == GameState.Screen.EventResult)
+{
+    <StatusBar />
+    <div class="screen">
+        <h2 class="header">OLAY · @State.EventCategoryName(State.CurrentEvent!.Category)</h2>
+        <p class="quote">@State.CurrentEvent!.Title</p>
+        <p class="subtle">@State.LastEventResult</p>
+        <button class="btn primary" @onclick="State.CloseEvent">Tamam</button>
+    </div>
+}
+else
+{
+    <StatusBar />
+    <div class="screen">
+
+        @switch (State.Current)
+        {
+            case GameState.Screen.MainMenu:
+                <h2 class="header">Ne yapıyorsun?</h2>
+                @if (State.Flash is not null)
+                {
+                    <p class="subtle">@State.Flash</p>
+                }
+                <div class="menu">
+                    <button class="btn" @onclick="State.OpenListings">İlanlara bak</button>
+                    <button class="btn" @onclick="State.OpenEquipment">Ekipman satın al</button>
+                    @if (State.Player.OwnedVehicle is not null)
+                    {
+                        <button class="btn primary" @onclick="State.OpenGarage">GARAJ — @State.Player.OwnedVehicle.DisplayName</button>
+                    }
+                    <button class="btn danger" @onclick="State.QuitGame">Kepenkleri indir</button>
+                </div>
+                break;
+
+            case GameState.Screen.Equipment:
+                <h2 class="header">Ekipman</h2>
+                <p class="subtle">Ekipman kalıcı yatırımdır. Her biri yeni bir teşhis yöntemi açar.</p>
+                @foreach (var e in Garaj.Core.EquipmentCatalog.All.Where(e => State.Player.Has(e.Id)))
+                {
+                    <div class="row"><span class="value" style="color:var(--green)">✓ @e.Name</span><span class="faint">@e.Unlocks</span></div>
+                }
+                @if (State.Flash is not null)
+                {
+                    <p class="subtle">@State.Flash</p>
+                }
+                <div class="menu">
+                    @foreach (var e in Garaj.Core.EquipmentCatalog.All.Where(e => !State.Player.Has(e.Id)))
+                    {
+                        <button class="btn" @onclick="() => State.BuyEquipment(e)">
+                            <span>@e.Name<br /><span class="faint">@e.Unlocks</span></span>
+                            <span class="tag">@UiFormat.Money(e.Cost)</span>
+                        </button>
+                    }
+                </div>
+                <BackBar OnClick="State.Back" />
+                break;
+
+            case GameState.Screen.Listings:
+                <h2 class="header">İlanlar</h2>
+                var active = State.Listings.Where(l => !l.Sold).ToList();
+                @if (active.Count == 0)
+                {
+                    <p class="subtle">Şu an ilan yok.</p>
+                }
+                <div class="menu">
+                    @foreach (var l in active)
+                    {
+                        var v = l.V;
+                        bool examined = l.K.MethodsUsed.Count > 0;
+                        <button class="btn" @onclick="() => State.OpenListing(l)">
+                            <span>@(examined ? "• " : "")@v.ModelName @v.ModelYear<br />
+                                <span class="faint">@v.OdometerReading.ToString("N0") km · @v.City</span></span>
+                            <span class="tag money">@UiFormat.Money(v.AskingPrice)</span>
+                        </button>
+                    }
+                </div>
+                <BackBar OnClick="State.Back" />
+                break;
+
+            case GameState.Screen.ListingDetail:
+                var lv = State.CurrentVehicle!; var lk = State.CurrentKnowledge!; var ls = State.CurrentSeller!;
+                <h2 class="header">@lv.DisplayName</h2>
+                <div>
+                    <div><b>@lv.ModelName @lv.Trim</b> — @lv.ModelYear model</div>
+                    <div class="faint">@lv.OdometerReading.ToString("N0") km · @lv.City · @lv.Plate</div>
+                </div>
+                <div class="row"><span class="label">İSTENEN</span><span class="value" style="color:var(--green)">@UiFormat.Money(lv.AskingPrice)</span></div>
+                <p class="quote">"@lv.ListingText"</p>
+                <div class="row">
+                    <span><b>@ls.Name</b> <span class="faint">(@ls.ArchetypeName)</span></span>
+                    <span class="@(ls.PatienceRemaining <= 1 ? "c-text-red" : "faint")">@ls.PatienceMood</span>
+                </div>
+                @if (ls.ProvenLiar)
+                {
+                    <p class="subtle" style="color:var(--red)">⚠ Bu adamı yüzüne karşı yalan söylerken yakaladın.</p>
+                }
+
+                @if (ls.WalkedAway)
+                {
+                    <p class="subtle" style="color:var(--red)">Satıcı gitti. Bu araç artık senin için yok.</p>
+                    <button class="btn primary" @onclick="() => { State.CurrentListing!.Sold = true; State.Back(); }">Tamam</button>
+                }
+                else
+                {
+                    <div class="menu">
+                        <button class="btn" @onclick="State.OpenDiagnosis">Teşhis yap</button>
+                        <button class="btn" @onclick="State.OpenAskSeller">Satıcıya soru sor</button>
+                        <button class="btn" @onclick="State.OpenDocumentDesk">Belge masası <span class="tag">@lk.ProvenContradictions.Count çelişki</span></button>
+                        <button class="btn" @onclick="() => State.OpenStatusTable(true, GameState.Screen.ListingDetail)">Ekspertiz tablosu <span class="tag">@lk.MethodsUsed.Count yöntem</span></button>
+                        <button class="btn" @onclick="State.OpenObservations">Bulgular <span class="tag">@lk.Observations.Count not</span></button>
+                        <button class="btn primary" @onclick="State.OpenNegotiate">Pazarlık / satın al</button>
+                    </div>
+                }
+                <BackBar OnClick="State.Back" />
+                break;
+
+            case GameState.Screen.Diagnosis:
+                var dk = State.CurrentKnowledge!; var ds = State.CurrentSeller;
+                var usable = Garaj.Core.MethodCatalog.All.Where(m => m.RequiredEquipment is null || State.Player.Has(m.RequiredEquipment)).ToList();
+                var locked = Garaj.Core.MethodCatalog.All.Where(m => m.RequiredEquipment is not null && !State.Player.Has(m.RequiredEquipment)).ToList();
+                <h2 class="header">Teşhis yöntemleri</h2>
+                @if (ds is not null)
+                {
+                    <p class="subtle">Satıcının sabrı: @ds.PatienceRemaining/@ds.PatienceMax (@ds.PatienceMood)</p>
+                }
+                @if (State.Flash is not null)
+                {
+                    <p class="subtle" style="color:var(--red)">@State.Flash</p>
+                }
+                <div class="menu">
+                    @foreach (var m in usable)
+                    {
+                        bool used = dk.MethodsUsed.Contains(m.Id);
+                        decimal cst = State.EffectiveCost(m);
+                        <button class="btn" @onclick="() => State.RunDiagnosis(m)">
+                            <span>@(used ? "✓ " : "")@m.Name</span>
+                            <span class="tag">@(cst > 0 ? UiFormat.Money(cst) : "ücretsiz") · @m.Minutes dk</span>
+                        </button>
+                    }
+                    @foreach (var m in locked)
+                    {
+                        <div class="btn locked">
+                            <span>@m.Name</span>
+                            <span class="tag">@Garaj.Core.EquipmentCatalog.Get(m.RequiredEquipment!).Name gerekiyor</span>
+                        </div>
+                    }
+                </div>
+                <BackBar OnClick="State.Back" />
+                break;
+
+            case GameState.Screen.DiagnosisResult:
+                var res = State.LastDiagnosisResult!; var meth = State.LastMethod!;
+                <h2 class="header">@meth.Name</h2>
+                <p class="subtle">@meth.FlavorText</p>
+                @if (res.SellerRefused)
+                {
+                    <p style="color:var(--red)">SATICI REDDETTİ</p>
+                    <p class="quote">@res.RefusalText</p>
+                }
+                else
+                {
+                    <div class="stack">
+                        @foreach (var o in res.Observations)
+                        {
+                            <ObservationCard Obs="o" />
+                        }
+                    </div>
+                    <p class="faint">
+                        @(State.LastDiagnosisPaid > 0 ? $"Maliyet: {UiFormat.Money(State.LastDiagnosisPaid)}   " : "Ücretsiz.   ")
+                        Süre: @(res.Minutes >= 120 ? $"{res.Minutes / 60} saat" : $"{res.Minutes} dk")
+                    </p>
+                }
+                <button class="btn primary" @onclick="State.DiagnosisResultContinue">Devam</button>
+                break;
+
+            case GameState.Screen.StatusTable:
+                var tv = State.CurrentVehicle!; var tk = State.CurrentKnowledge!;
+                <h2 class="header">Ekspertiz tablosu</h2>
+                <p class="subtle">Bantlar durumu DEĞİL, senin inandığın ARALIĞI gösterir.</p>
+                <div class="stack">
+                    @foreach (var g in Enum.GetValues<Garaj.Core.SystemGroup>())
+                    {
+                        <ConditionLine Label="@UiFormat.GroupName(g)" Range="tk.ForGroup(g)" />
+                    }
+                </div>
+                <h3 class="header" style="font-size:.95rem">Parça detayı</h3>
+                <div class="stack">
+                    @foreach (var g in Enum.GetValues<Garaj.Core.SystemGroup>())
+                    {
+                        var parts = Garaj.Core.PartCatalog.InGroup(g).Where(p => !tk.For(p.Id).IsUnexamined).ToList();
+                        if (parts.Count > 0)
+                        {
+                            <div class="group-label">@UiFormat.GroupName(g)</div>
+                            foreach (var p in parts)
+                            {
+                                <ConditionLine Label="@p.Name" Range="tk.For(p.Id)" />
+                            }
+                        }
+                    }
+                </div>
+                int unexamined = Garaj.Core.PartCatalog.All.Count(p => tk.For(p.Id).IsUnexamined);
+                @if (unexamined > 0)
+                {
+                    <p class="faint">@unexamined parça hiç incelenmedi. Onlar hakkında hiçbir şey bilmiyorsun.</p>
+                }
+
+                @if (State.StatusTableShowBet)
+                {
+                    var (rlow, rhigh, rconf) = Garaj.Core.Valuation.EstimatedRepairBill(tv, tk);
+                    var (mlow, mhigh) = Garaj.Core.Valuation.RestoredValueBand(tv);
+                    decimal bestCase = mhigh - (tv.AskingPrice + rlow);
+                    decimal worstCase = mlow - (tv.AskingPrice + rhigh);
+                    <h3 class="header" style="font-size:.95rem">Bahis</h3>
+                    <div class="stack">
+                        <div class="row"><span class="label">İstenen fiyat</span><span class="value">@UiFormat.Money(tv.AskingPrice)</span></div>
+                        <div class="row"><span class="label">Tahmini onarım faturası</span><span style="color:var(--yellow)">@UiFormat.Money(rlow) – @UiFormat.Money(rhigh) <span class="faint">(güven %@((int)(rconf*100)))</span></span></div>
+                        <div class="row"><span class="label">Toplam maliyetin</span><span class="value">@UiFormat.Money(tv.AskingPrice + rlow) – @UiFormat.Money(tv.AskingPrice + rhigh)</span></div>
+                        <div class="row"><span class="label">Onarılmış piyasa değeri</span><span style="color:var(--cyan)">@UiFormat.Money(mlow) – @UiFormat.Money(mhigh)</span></div>
+                        <div class="row"><span class="label">Olası sonuç</span>
+                            <span>
+                                <span class="@(worstCase >= 0 ? "c-text-green" : "c-text-red")">@UiFormat.Money(worstCase)</span>
+                                &nbsp;…&nbsp;
+                                <span class="@(bestCase >= 0 ? "c-text-green" : "c-text-red")">@UiFormat.Money(bestCase)</span>
+                            </span>
+                        </div>
+                    </div>
+                    <p class="subtle">
+                        @(rconf < 0.35f ? "Bu aracı neredeyse hiç tanımıyorsun. Şu an alırsan kumar oynuyorsun."
+                            : rconf < 0.6f ? "Fikrin var ama bant hâlâ geniş. Bir teşhis daha bandı daraltabilir."
+                            : "Bu araç hakkında iyi bir fikrin var. Yine de %100 asla bilemezsin.")
+                    </p>
+                }
+                <button class="btn primary" @onclick="State.StatusTableDone">Devam</button>
+                break;
+
+            case GameState.Screen.Observations:
+                var ok = State.CurrentKnowledge!;
+                <h2 class="header">Bulgular</h2>
+                @if (ok.Observations.Count == 0)
+                {
+                    <p class="subtle">Henüz hiçbir şey incelemedin.</p>
+                }
+                else
+                {
+                    <div class="stack">
+                        @foreach (var o in ok.Observations)
+                        {
+                            <ObservationCard Obs="o" />
+                        }
+                    </div>
+                    <p class="faint">ŞÜPHE'ler kanıt değildir — ama dumansız ateş de olmaz.</p>
+                }
+                <BackBar OnClick="State.Back" />
+                break;
+
+            case GameState.Screen.AskSellerPickGroup:
+                <h2 class="header">Ne hakkında soruyorsun?</h2>
+                <div class="menu">
+                    @foreach (var g in Enum.GetValues<Garaj.Core.SystemGroup>())
+                    {
+                        <button class="btn" @onclick="() => State.AskSellerAbout(g)">@UiFormat.GroupName(g)</button>
+                    }
+                </div>
+                <BackBar OnClick="State.Back" />
+                break;
+
+            case GameState.Screen.AskSellerResult:
+                var asS = State.CurrentSeller!; var asReply = State.LastAskReply!;
+                <h2 class="header">@asS.Name — @UiFormat.GroupName(State.LastAskGroup)</h2>
+                <p class="subtle">Sen: "@UiFormat.GroupName(State.LastAskGroup) tarafında bir sıkıntı var mı?"</p>
+                <p class="quote">@asS.Name: @asReply.Answer</p>
+                @if (asReply.Stance == Garaj.Core.SellerStance.IsrarliYalan)
+                {
+                    <p style="color:var(--red)">Bunu sen zaten kendi gözünle gördün. Adam yüzüne karşı inkâr ediyor.</p>
+                }
+                else if (asReply.Stance == Garaj.Core.SellerStance.Yakalandi)
+                {
+                    <p style="color:var(--green)">Bulduğun şeyi kabul etti. Artık pazarlıkta elinde bir koz var.</p>
+                }
+                @if (State.LastAskTell is not null)
+                {
+                    <ObservationCard Obs="State.LastAskTell" />
+                }
+                <p class="faint">Tell'ler %100 güvenilir değildir. Dürüst insanlar da gergin olur.</p>
+                <button class="btn primary" @onclick="State.Back">Devam</button>
+                break;
+
+            case GameState.Screen.DocumentDesk:
+                var ddV = State.CurrentVehicle!; var ddK = State.CurrentKnowledge!;
+                <h2 class="header">Ofis masası — belgeler</h2>
+                <p class="subtle">İki belgeyi yan yana koy. Çelişkiyi sana kimse söylemeyecek.</p>
+                @foreach (var d in Enum.GetValues<Garaj.Core.DocumentId>())
+                {
+                    <div class="row"><span style="color:var(--cyan)">@Garaj.Core.DocumentDesk.DocumentName(d)</span><span class="faint">@Garaj.Core.DocumentDesk.Fields(ddV, d).Count satır</span></div>
+                }
+                @if (ddK.ProvenContradictions.Count > 0)
+                {
+                    <p style="color:var(--green)">Kanıtladığın çelişki: @ddK.ProvenContradictions.Count</p>
+                }
+                <div class="menu">
+                    <button class="btn" @onclick="State.OpenReadDocumentPick">Bir belgeyi oku</button>
+                    <button class="btn" @onclick="State.OpenComparePickLeft">İki belgeyi karşılaştır</button>
+                </div>
+                <BackBar OnClick="State.Back" />
+                break;
+
+            case GameState.Screen.ReadDocumentPick:
+                <h2 class="header">Hangi belge?</h2>
+                <div class="menu">
+                    @foreach (var d in Enum.GetValues<Garaj.Core.DocumentId>())
+                    {
+                        <button class="btn" @onclick="() => State.OpenReadDocument(d)">@Garaj.Core.DocumentDesk.DocumentName(d)</button>
+                    }
+                </div>
+                <BackBar OnClick="State.Back" />
+                break;
+
+            case GameState.Screen.ReadDocumentView:
+                <h2 class="header">@Garaj.Core.DocumentDesk.DocumentName(State.ReadDoc)</h2>
+                <div class="stack">
+                    @foreach (var f in Garaj.Core.DocumentDesk.Fields(State.CurrentVehicle!, State.ReadDoc))
+                    {
+                        <div class="row"><span class="label">@f.Label</span><span class="value">@f.Value</span></div>
+                    }
+                </div>
+                <p class="faint">Tek başına bir belge yalan söyleyebilir. Yalanı yakalamak için başka bir belgeyle karşılaştırman gerekir.</p>
+                <button class="btn primary" @onclick="State.Back">Devam</button>
+                break;
+
+            case GameState.Screen.CompareDocumentsPickLeft:
+                <h2 class="header">Soldaki belge</h2>
+                <div class="menu">
+                    @foreach (var d in Enum.GetValues<Garaj.Core.DocumentId>())
+                    {
+                        <button class="btn" @onclick="() => State.PickCompareLeft(d)">@Garaj.Core.DocumentDesk.DocumentName(d)</button>
+                    }
+                </div>
+                <BackBar OnClick="State.Back" />
+                break;
+
+            case GameState.Screen.CompareDocumentsPickRight:
+                <h2 class="header">Sağdaki belge</h2>
+                <div class="menu">
+                    @foreach (var d in Enum.GetValues<Garaj.Core.DocumentId>())
+                    {
+                        <button class="btn" @onclick="() => State.PickCompareRight(d)">
+                            @(d == State.CompareLeftDoc ? $"{Garaj.Core.DocumentDesk.DocumentName(d)} (kendi içinde)" : Garaj.Core.DocumentDesk.DocumentName(d))
+                        </button>
+                    }
+                </div>
+                <BackBar OnClick="State.Back" />
+                break;
+
+            case GameState.Screen.CompareDocumentsView:
+                <h2 class="header">@Garaj.Core.DocumentDesk.DocumentName(State.CompareLeftDoc) ⟷ @Garaj.Core.DocumentDesk.DocumentName(State.CompareRightDoc)</h2>
+                <p class="subtle">Soldan bir satır seç, sonra çeliştiğini düşündüğün sağ satıra dokun.</p>
+                <div class="group-label">@Garaj.Core.DocumentDesk.DocumentName(State.CompareLeftDoc)</div>
+                <div class="menu">
+                    @for (int i = 0; i < State.CompareLeftFields.Count; i++)
+                    {
+                        var idx = i; var f = State.CompareLeftFields[i];
+                        <button class="btn small @(State.CompareSelectedLeft == idx ? "primary" : "")" @onclick="() => State.SelectCompareLeftRow(idx)">
+                            <span>@f.Label</span><span class="tag">@f.Value</span>
+                        </button>
+                    }
+                </div>
+                <div class="group-label">@Garaj.Core.DocumentDesk.DocumentName(State.CompareRightDoc)</div>
+                <div class="menu">
+                    @for (int i = 0; i < State.CompareRightFields.Count; i++)
+                    {
+                        var idx = i; var f = State.CompareRightFields[i];
+                        <button class="btn small @(State.CompareSelectedLeft < 0 ? "disabled" : "")" disabled="@(State.CompareSelectedLeft < 0)" @onclick="() => State.ChallengeCompareRow(idx)">
+                            <span>@f.Label</span><span class="tag">@f.Value</span>
+                        </button>
+                    }
+                </div>
+                <BackBar OnClick="State.Back" />
+                break;
+
+            case GameState.Screen.CompareResult:
+                var cr = State.LastChallenge!;
+                <h2 class="header">@(cr.IsContradiction ? "Çelişki" : "Karşılaştırma")</h2>
+                <p style="color:@(cr.IsContradiction ? "var(--cyan)" : "var(--darkyellow)")">@cr.Verdict</p>
+                @if (cr.Explanation is not null)
+                {
+                    <p class="subtle">@cr.Explanation</p>
+                }
+                @if (cr.IsContradiction)
+                {
+                    <p style="color:var(--green)">Bu artık pazarlıkta kullanabileceğin bir koz.</p>
+                }
+                else if (State.CurrentSeller is not null)
+                {
+                    <p class="faint">Satıcı belgeleri karıştırmandan sıkıldı. (sabır −1)</p>
+                }
+                <button class="btn primary" @onclick="State.Back">Devam</button>
+                break;
+
+            case GameState.Screen.Negotiate:
+                var ngL = State.CurrentListing!; var ngV = ngL.V; var ngS = ngL.S; var ngK = ngL.K;
+                <h2 class="header">Pazarlık</h2>
+                <div><b>@ngV.DisplayName</b> · isteniyor @UiFormat.Money(ngV.AskingPrice)</div>
+                <p class="subtle">Cebinde @UiFormat.Money(State.Player.Money) var.</p>
+                var (nlow, nhigh, nconf) = Garaj.Core.Valuation.EstimatedRepairBill(ngV, ngK);
+                <p style="color:var(--darkyellow)">Tahmini onarım: @UiFormat.Money(nlow) – @UiFormat.Money(nhigh) (güven %@((int)(nconf*100)))</p>
+                @if (ngS.ExtraConcession > 0m)
+                {
+                    <p style="color:var(--green)">Kozlarla koparılan taviz: −@UiFormat.Money(ngS.ExtraConcession)</p>
+                }
+                <p class="@(ngS.PatienceRemaining <= 1 ? "" : "faint")" style="@(ngS.PatienceRemaining <= 1 ? "color:var(--red)" : "")">Satıcının sabrı: @ngS.PatienceMood</p>
+
+                @if (State.NegotiateSellerWalked)
+                {
+                    <p style="color:var(--red)">@State.LastNegotiateLine</p>
+                    <button class="btn primary" @onclick="State.LeaveNegotiate">Tamam</button>
+                }
+                else
+                {
+                    @if (State.LastNegotiateLine is not null)
+                    {
+                        <p class="quote">@State.LastNegotiateLine</p>
+                        @if (State.LastCounterOffer is decimal counter)
+                        {
+                            <p class="faint">Karşı teklif: @UiFormat.Money(counter)</p>
+                        }
+                    }
+                    @if (State.NegotiateError is not null)
+                    {
+                        <p style="color:var(--red)">@State.NegotiateError</p>
+                    }
+
+                    <div class="menu">
+                        <button class="btn @(State.CurrentLeverages.Count == 0 ? "disabled" : "")" @onclick="State.OpenPressLeverage">
+                            Koz kullan <span class="tag">@State.CurrentLeverages.Count adet</span>
+                        </button>
+                    </div>
+
+                    <div class="field">
+                        <label>Teklifin</label>
+                        <input type="number" inputmode="numeric" @bind="OfferAmount" @bind:event="oninput" placeholder="₺" />
+                    </div>
+                    <div class="btnrow">
+                        <button class="btn primary" @onclick="SubmitOffer">Rakam söyle</button>
+                        <button class="btn" @onclick="State.LeaveNegotiate">Vazgeç</button>
+                    </div>
+                }
+                break;
+
+            case GameState.Screen.PressLeverage:
+                <h2 class="header">Kozlar</h2>
+                <p class="subtle">Bulduğun her şey masaya konabilir. Ama her koz satıcının sabrını yer.</p>
+                <div class="menu">
+                    @foreach (var lev in State.CurrentLeverages)
+                    {
+                        string tag = lev.MonetaryWeight >= 18_000m ? "AĞIR" : lev.MonetaryWeight >= 7_000m ? "orta" : "hafif";
+                        <button class="btn" @onclick="() => State.PressLeverage(lev)">
+                            <span>[@lev.KindName · @tag] @lev.Text</span>
+                        </button>
+                    }
+                </div>
+                <button class="btn" @onclick="State.CancelPressLeverage">Geri</button>
+                break;
+
+            case GameState.Screen.LeverageResult:
+                var pr = State.LastPressResult!; var lev2 = State.PressedLeverage!;
+                <h2 class="header">Masaya koydun</h2>
+                <p class="quote">Sen: "@lev2.Text"</p>
+                <p style="color:@(pr.SellerWalkedAway ? "var(--red)" : pr.Backfired ? "var(--darkyellow)" : "var(--green)")">
+                    @State.CurrentSeller!.Name: @pr.SellerLine
+                </p>
+                @if (!pr.Backfired && !pr.SellerWalkedAway && pr.ConcessionGained > 0m)
+                {
+                    <p style="color:var(--green)">Taban fiyat @UiFormat.Money(pr.ConcessionGained) düştü. Toplam taviz: @UiFormat.Money(State.CurrentSeller!.ExtraConcession)</p>
+                }
+                @if (pr.Backfired)
+                {
+                    <p style="color:var(--darkyellow)">Fazla üstüne gittin. Bu arketip baskıya iyi tepki vermiyor.</p>
+                }
+                <button class="btn primary" @onclick="State.LeverageResultContinue">Devam</button>
+                break;
+
+            case GameState.Screen.Garage:
+                var gv = State.CurrentVehicle!;
+                <h2 class="header">Garaj — @gv.DisplayName</h2>
+                <p class="subtle">
+                    Alış: @UiFormat.Money(State.Player.PurchasePrice) ·
+                    Onarım: @UiFormat.Money(State.Player.RepairSpend) ·
+                    Toplam: @UiFormat.Money(State.Player.PurchasePrice + State.Player.RepairSpend)
+                </p>
+                @if (gv.KmSincePurchase > 0)
+                {
+                    <p class="faint">Aldığından beri @gv.KmSincePurchase.ToString("N0") km yaptın.</p>
+                }
+                <div class="menu">
+                    <button class="btn" @onclick="() => State.OpenStatusTable(false, GameState.Screen.Garage)">Ekspertiz tablosu</button>
+                    <button class="btn" @onclick="State.OpenDiagnosis">Teşhis yap (satıcı yok)</button>
+                    <button class="btn" @onclick="State.OpenRepair">Parça onar</button>
+                    <button class="btn" @onclick="State.OpenTestDrive">Test sürüşü (200 km)</button>
+                    <button class="btn good" @onclick="State.OpenSell">Sat</button>
+                </div>
+                <BackBar OnClick="State.Back" />
+                break;
+
+            case GameState.Screen.Repair:
+                var rp = State.RepairablePartsList().ToList(); var rk = State.CurrentKnowledge!;
+                <h2 class="header">Onarım</h2>
+                <p class="subtle">Sadece incelediğin parçaları onarabilirsin — göremediğin şeyi tamir edemezsin.</p>
+                @if (State.Flash is not null)
+                {
+                    <p style="color:var(--red)">@State.Flash</p>
+                }
+                @if (rp.Count == 0)
+                {
+                    <p style="color:var(--green)">İncelediğin parçaların hepsi iyi görünüyor.</p>
+                    <p class="faint">(İncelemediklerin hakkında hiçbir şey söylenemez.)</p>
+                }
+                else
+                {
+                    <div class="menu">
+                        @foreach (var p in rp)
+                        {
+                            var b = rk.For(p.Id);
+                            decimal est = p.IsReplaceable ? p.PartCost : p.PartCost + 1_500m;
+                            int blockers = Garaj.Core.Disassembly.RemovalChain(p.Id).Count;
+                            <button class="btn" @onclick="() => State.StartRepairJob(p)">
+                                <span>@p.Name<br /><span class="faint">inanç @b.Min.ToString("F0")-@b.Max.ToString("F0")@(blockers > 0 ? $" · {blockers} parça sökülmeli" : "")</span></span>
+                                <span class="tag">~@UiFormat.Money(est)</span>
+                            </button>
+                        }
+                    </div>
+                }
+                <BackBar OnClick="State.Back" />
+                break;
+
+            case GameState.Screen.RepairJob:
+                var job = State.Job!;
+                <h2 class="header">Onarım — @job.Target.Name</h2>
+
+                @if (job.PendingBoltState.HasValue && job.LastRemoveMessage is null)
+                {
+                    <p class="subtle">Cıvata durumu: <span style="color:var(--darkyellow)">@Garaj.Core.Disassembly.BoltName(job.PendingBoltState.Value)</span></p>
+                    <div class="menu">
+                        @foreach (var a in job.PendingOptions)
+                        {
+                            var info = State.BoltApproachInfo(a);
+                            <button class="btn" @onclick="() => State.ChooseBoltApproach(a)">
+                                <span>@Garaj.Core.Disassembly.ApproachName(a)<br /><span class="faint">@info.RiskLabel</span></span>
+                                <span class="tag">+@info.Minutes dk @(info.Cost > 0 ? UiFormat.Money(info.Cost) : "")</span>
+                            </button>
+                        }
+                    </div>
+                    <button class="btn danger" @onclick="State.CancelRepairJob">İşten vazgeç</button>
+                }
+                else if (job.PendingBoltState.HasValue && job.LastRemoveMessage is not null)
+                {
+                    <p style="color:@(job.LastRemoveStripped ? "var(--red)" : "var(--green)")">@job.LastRemoveMessage</p>
+                    <button class="btn primary" @onclick="State.BoltStepContinue">Devam</button>
+                }
+                else if (job.RepairMessage is not null)
+                {
+                    <p style="color:var(--green)">@job.RepairMessage</p>
+                    <p class="faint">Parça/işçilik: @UiFormat.Money(job.RepairCost)</p>
+                    <button class="btn primary" @onclick="State.RepairDoneContinue">Devam</button>
+                }
+                else if (job.TorqueResults.Count == 0 && !job.HasWrench)
+                {
+                    <p class="subtle">Tork anahtarın yok. Cıvataları göz kararı sıkacaksın.</p>
+                    <p class="faint">Az sıkarsan gevşer, fazla sıkarsan diş zorlar — ikisi de yolda çıkar.</p>
+                    <div class="menu">
+                        <button class="btn" @onclick="@(() => State.ApplyTorque(Garaj.Core.TorqueChoice.Dikkatli))">Dikkatli, yavaş (en güvenli)</button>
+                        <button class="btn" @onclick="@(() => State.ApplyTorque(Garaj.Core.TorqueChoice.Normal))">Normal</button>
+                        <button class="btn" @onclick="@(() => State.ApplyTorque(Garaj.Core.TorqueChoice.Hizli))">Hızlı, olsun bitsin</button>
+                    </div>
+                }
+                else
+                {
+                    <h3 class="header" style="font-size:.95rem">Montaj</h3>
+                    @foreach (var t in job.TorqueResults.Where(t => t.Flaw))
+                    {
+                        <p style="color:var(--darkyellow)">@t.Message</p>
+                    }
+                    @if (!job.AnyTorqueFlaw)
+                    {
+                        <p style="color:var(--green)">Her şey yerine oturdu, tork tuttu.</p>
+                    }
+                    else
+                    {
+                        <p class="subtle">Bazı bağlantılar tam tutmadı. Test sürüşünde belli olur.</p>
+                    }
+                    <p class="faint">Toplam maliyet: @UiFormat.Money(job.JobCost) · Toplam süre: @(job.JobMinutes / 60) saat @(job.JobMinutes % 60) dk</p>
+                    <button class="btn primary" @onclick="State.FinishRepairJob">İşi bitir</button>
+                }
+                break;
+
+            case GameState.Screen.TestDriveResult:
+                <h2 class="header">Test sürüşü</h2>
+                <p class="subtle">200 km yol yapıyorsun. Araç ısınıyor, her şey yerine oturuyor.</p>
+                @if (State.TestDriveSurfaced.Count == 0)
+                {
+                    <p style="color:var(--green)">Sorunsuz. Şimdilik.</p>
+                }
+                else
+                {
+                    <div class="stack">
+                        @foreach (var text in State.TestDriveSurfaced)
+                        {
+                            <ObservationCard Obs="new Observation(text, ObservationKind.Finding, MethodId.TestSurusuUzun)" />
+                        }
+                    </div>
+                    <p style="color:var(--darkyellow)">Gizlenen şeyler ortaya çıktı. Satıcı bunu bildiği için acele ettiriyordu.</p>
+                }
+                <button class="btn primary" @onclick="State.Back">Devam</button>
+                break;
+
+            case GameState.Screen.Sell:
+                var sv = State.CurrentVehicle!;
+                decimal spent = State.Player.PurchasePrice + State.Player.RepairSpend;
+                <h2 class="header">Satış</h2>
+                <p class="subtle">Bu araca toplam @UiFormat.Money(spent) yatırdın.</p>
+                var (svlow, svhigh) = Garaj.Core.Valuation.RestoredValueBand(sv);
+                <p style="color:var(--cyan)">Piyasa bu modeli iyi durumda @UiFormat.Money(svlow) – @UiFormat.Money(svhigh) arası görüyor.</p>
+                <div class="field">
+                    <label>Kaça ilan veriyorsun?</label>
+                    <input type="number" inputmode="numeric" @bind="AskingAmount" @bind:event="oninput" placeholder="₺" />
+                </div>
+                <div class="btnrow">
+                    <button class="btn primary" @onclick="SubmitAsking">İlan ver</button>
+                    <button class="btn" @onclick="State.Back">Vazgeç</button>
+                </div>
+                break;
+
+            case GameState.Screen.SellResult:
+                var sale = State.LastSale!;
+                <h2 class="header">Alıcı geldi</h2>
+                <p class="subtle">Alıcı da ekspertiz yapıyor. Senin göremediğini o görebilir.</p>
+                @if (sale.BuyerFindings.Count == 0)
+                {
+                    <p style="color:var(--green)">Alıcı bir şey bulamadı.</p>
+                }
+                else
+                {
+                    <div class="stack">
+                        @foreach (var f in sale.BuyerFindings)
+                        {
+                            <ObservationCard Obs="new Observation(f, ObservationKind.Finding, MethodId.Gozle)" />
+                        }
+                    </div>
+                }
+                <p style="color:var(--yellow)">Alıcının teklifi: @UiFormat.Money(sale.Offer)</p>
+                @if (sale.Sold)
+                {
+                    <button class="btn primary" @onclick="State.AcceptSaleAtAsking">Sat — @UiFormat.Money(State.SaleAsking)</button>
+                }
+                else
+                {
+                    <p class="quote">"@UiFormat.Money(State.SaleAsking) çok fazla. @UiFormat.Money(sale.Offer) veririm, olmazsa yok."</p>
+                    <div class="btnrow">
+                        <button class="btn primary" @onclick="State.AcceptSaleAtOffer">Evet, @UiFormat.Money(sale.Offer)'a sat</button>
+                        <button class="btn" @onclick="State.DeclineSale">Hayır, vazgeç</button>
+                    </div>
+                }
+                break;
+
+            case GameState.Screen.TruthReveal:
+                <TruthRevealView OnDone="State.TruthRevealDone" />
+                break;
+        }
+    </div>
+}
+
+@code {
+    private decimal OfferAmount;
+    private decimal AskingAmount;
+
+    private void SubmitOffer()
+    {
+        if (OfferAmount <= 0) return;
+        State.MakeOffer(OfferAmount);
+        OfferAmount = 0;
+    }
+
+    private void SubmitAsking()
+    {
+        if (AskingAmount <= 0) return;
+        State.SubmitAskingPrice(AskingAmount);
+        AskingAmount = 0;
+    }
+}

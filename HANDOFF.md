@@ -2,7 +2,68 @@
 
 > Bu belge tamamen bağlamsız yeni bir oturum için yazıldı. Oyun içeriği ve README
 > Türkçedir; bu belge teknik aktarım olduğu için İngilizce/Türkçe karışıktır.
-> Son güncelleme: 2026-07-26 (storyteller olay sistemi + çift-tık başlatma scriptleri).
+> Son güncelleme: 2026-07-27 (web/mobil port — `Garaj.Web`, Blazor WebAssembly).
+
+---
+
+## -1. Session log — web/mobile port (2026-07-27)
+
+The user asked to make the prototype playable in a browser so it could be tested
+on a phone. §0/§4.5/§7 below say mobile arrives "later, via Unity" and warn
+against porting the *console UI* to mobile — this session did not do that. It
+added a **new** presentation layer, `src/Garaj.Web`, a Blazor WebAssembly app
+that references `Garaj.Core` exactly like `Garaj.Console` does and implements
+its own touch-first screens. No line of `Garaj.Core` changed. This is a
+pragmatic middle step ahead of the eventual Unity port, not a replacement for
+it — it exists so the user can playtest on a real phone *today* without
+waiting on art/Unity work.
+
+- New project `src/Garaj.Web` (net10.0, `Microsoft.NET.Sdk.BlazorWebAssembly`),
+  added to `GARAJ.slnx`. Runs entirely client-side (WASM) — `dotnet run
+  --project src/Garaj.Web` serves it; no backend/API, no server-side game state.
+- `GameState.cs` is the web equivalent of `GarajApp.Program` — same calls into
+  `Garaj.Core` (`DiagnosisEngine.Run`, `NegotiationEngine`, `Disassembly`,
+  `SaleEngine`, `Storyteller.MaybeFire`, …), reimplemented as an explicit
+  screen-state-machine instead of nested blocking console loops, because a
+  browser UI can't block on `Console.ReadLine()`. `Pages/Game.razor` renders
+  one screen per `GameState.Screen` value; `Shared/*.razor` holds small reusable
+  bits (status bar, confidence-band bar, observation card, back button).
+- **The architectural rule is preserved and re-verified for the new layer**:
+  `Game.razor` and `Shared/*` read only `PlayerKnowledge`/`ConfidenceRange`.
+  The one exception is `Shared/TruthRevealView.razor`, which — like
+  `Program.TruthReveal` — is allowed to read `VehicleInstance.Condition`
+  because it *is* the truth-reveal screen. Says so in a comment at the top.
+- **Blazor pitfall hit and fixed**: a child component (`BackBar`, and initially
+  `TruthRevealView`) calling a `GameState` method directly from its own
+  `@onclick` does **not** cause the parent `Game.razor` to re-render — Blazor
+  only auto-re-renders the component that owns the event handler. Symptom was
+  silent: `State.Back()` ran correctly (verified via a temporary
+  `Console.WriteLine` in the WASM console) but the screen never visibly
+  changed, so tapping "Geri" looked like a dead button. Fix: give the child an
+  `EventCallback` parameter and bind it from `Game.razor`'s own markup
+  (`<BackBar OnClick="State.Back" />`) so Razor captures `Game.razor` as the
+  `EventCallback` receiver. **If you add another child component with its own
+  button, wire it the same way — never call a `GameState`-mutating method
+  directly from inside a child component's `@onclick`.**
+- Verified end-to-end with Playwright (installed via `pip install playwright`,
+  using the pre-installed `/opt/pw-browsers/chromium` — do not
+  `playwright install`) at a 390×844 mobile viewport: full buy → diagnose →
+  negotiate → repair job (disassembly/bolt/torque wizard) → test drive → sell
+  → truth reveal loop, plus the document desk (read + compare + challenge) and
+  back-navigation from every screen. Zero JS console errors.
+- `.NET SDK` was not preinstalled in this container; installed via
+  `apt-get install -y dotnet-sdk-10.0` (the `dotnet-install.sh` script is
+  blocked by the egress proxy policy — `builds.dotnet.microsoft.com` — so use
+  the distro package instead if this happens again).
+
+### Must also avoid (adds to §6 below)
+
+8. **Do not let a child Razor component mutate `GameState` from its own
+   `@onclick` without an `EventCallback` bound by the parent.** See the pitfall
+   above — the failure mode is a button that silently does nothing.
+9. **`Garaj.Web` is not the Unity port.** It's disposable the same way
+   `Garaj.Console` is (per §4.5/§7) — a fast way to playtest on real hardware,
+   not the final mobile client.
 
 ---
 
@@ -142,6 +203,11 @@ dotnet run --project src/Garaj.Console -- 12345              # fixed seed
 dotnet run --project src/Garaj.Console -- --balance 1000 7   # economy report
 dotnet run --project src/Garaj.Console -- --events 80 7      # storyteller sim
 ```
+
+**On a phone** (or any browser): `dotnet run --project src/Garaj.Web --urls
+http://0.0.0.0:5217`, then open `http://<your-machine-ip>:5217` from the phone
+on the same Wi‑Fi. See README.md § "Web / mobil" for details. This is a new,
+separate touch UI over the same `Garaj.Core` — see §-1 above.
 
 `dotnet` was installed via Homebrew during the first session. It is **not on the
 default PATH** — prefix commands with `export PATH="/opt/homebrew/bin:$PATH"`.

@@ -1,0 +1,23 @@
+@inject GameState State
+
+<div class="statusbar">
+    <span>GÜN @State.Player.Day</span>
+    <span class="faint">@State.Player.Clock</span>
+    <span class="money @(State.Player.Money > 10_000m ? "pos" : "neg")">@UiFormat.Money(State.Player.Money)</span>
+    <span class="rep">İtibar @State.Player.Reputation.ToString("F0")</span>
+
+    @{
+        float pm = State.Player.PartsMultiplier;
+    }
+    @if (Math.Abs(pm - 1f) > 0.01f)
+    {
+        <span class="@(pm > 1f ? "parts-up" : "parts-down")">
+            @(pm > 1f ? $"parça ↑%{(pm - 1f) * 100:F0}" : $"parça ↓%{(1f - pm) * 100:F0}")
+        </span>
+    }
+
+    @if (State.Player.Equipment.Count > 0)
+    {
+        <span class="equip">@string.Join(" ", State.Player.Equipment.Select(e => Garaj.Core.EquipmentCatalog.Get(e).Name.Split(' ')[0]))</span>
+    }
+</div>

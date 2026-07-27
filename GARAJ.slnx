@@ -2,5 +2,6 @@
   <Folder Name="/src/">
     <Project Path="src/Garaj.Console/Garaj.Console.csproj" />
     <Project Path="src/Garaj.Core/Garaj.Core.csproj" />
+    <Project Path="src/Garaj.Web/Garaj.Web.csproj" />
   </Folder>
 </Solution>

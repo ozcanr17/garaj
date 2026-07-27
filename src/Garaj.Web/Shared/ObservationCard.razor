@@ -1,0 +1,11 @@
+@{
+    var (prefix, cls) = UiFormat.ObservationStyle(Obs.Kind);
+}
+<div class="obs @cls">
+    <span class="kind">@prefix</span>
+    <span class="text">@Obs.Text</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Observation Obs { get; set; } = null!;
+}

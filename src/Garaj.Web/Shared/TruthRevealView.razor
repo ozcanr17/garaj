@@ -1,0 +1,122 @@
+@* Bu bileşen, oyunun mimari kuralının TEK istisnasıdır: VehicleInstance.Condition'ı
+   doğrudan okur. Sadece burada — satış sonrası "Gerçek" ekranında. *@
+@inject GameState State
+
+@{
+    var v = State.CurrentVehicle!;
+    var k = State.CurrentKnowledge!;
+    decimal profit = State.LastSaleProfit;
+
+    static float Miss(ConfidenceRange b, float truth)
+        => truth >= b.Min && truth <= b.Max ? 0f
+         : truth < b.Min ? b.Min - truth : truth - b.Max;
+
+    var wrong = v.Parts.Values
+        .Where(p => !k.For(p.DefId).IsUnexamined)
+        .Select(p => new { Part = p, Belief = k.For(p.DefId), Miss = Miss(k.For(p.DefId), p.Condition) })
+        .Where(x => x.Miss > 6f)
+        .OrderByDescending(x => x.Miss)
+        .Take(6)
+        .ToList();
+
+    var blindSpots = v.Parts.Values
+        .Where(p => k.For(p.DefId).IsUnexamined && p.Condition < 45f)
+        .OrderBy(p => p.Condition)
+        .Take(6)
+        .ToList();
+
+    var missed = v.AllDefects.Where(d => !k.DiscoveredDefects.Contains(d.Id)).ToList();
+}
+
+<h2 class="header">Gerçek</h2>
+<p class="subtle">Şimdi bu aracın ne olduğunu görüyorsun. Oyun sırasında göremezdin.</p>
+
+<div class="row"><span class="label">Önceki sahip profili</span><span style="color:var(--cyan)">@GameState.OwnerName(v.Owner)</span></div>
+<p class="faint">@GameState.OwnerHint(v.Owner)</p>
+
+@if (v.OdometerReading != v.TrueOdometer)
+{
+    <div class="row"><span class="label">Gösterge</span><span>@v.OdometerReading.ToString("N0") km</span></div>
+    <div class="row"><span class="label">Gerçek</span><span style="color:var(--red)">@v.TrueOdometer.ToString("N0") km</span></div>
+}
+
+@if (v.Tampers.Count > 0)
+{
+    <div class="group-label">Bu araçta yapılmış maskelemeler</div>
+    <div class="stack">
+        @foreach (var t in v.Tampers)
+        {
+            bool caught = k.Observations.Any(o =>
+                o.Kind == ObservationKind.Finding &&
+                o.Text.Contains(t.Def.Name, StringComparison.OrdinalIgnoreCase));
+            <div class="row">
+                <span class="@(caught ? "c-text-green" : "c-text-red")">@t.Def.Name</span>
+                <span class="@(caught ? "c-text-green" : "c-text-red")">@(caught ? "YAKALADIN" : t.Surfaced ? "sonradan ortaya çıktı" : "kaçırdın")</span>
+            </div>
+        }
+    </div>
+}
+
+<h3 class="header" style="font-size:.95rem">Yanıldığın yerler</h3>
+@if (wrong.Count == 0)
+{
+    <p style="color:var(--green)">İncelediğin hiçbir parçada bandın dışına düşmedin.</p>
+    <p class="faint">Tahminlerin belirsizdi ama dürüsttü. Ustalık budur.</p>
+}
+else
+{
+    <div class="stack">
+        @foreach (var e in wrong)
+        {
+            <div class="row">
+                <span>@e.Part.Def.Name</span>
+                <span><span style="color:var(--yellow)">sandın @e.Belief.Min.ToString("F0")-@e.Belief.Max.ToString("F0")</span> ·
+                    <span style="color:var(--red)">gerçek @e.Part.Condition.ToString("F0")</span>
+                    <span class="faint">(@e.Miss.ToString("F0") puan dışında)</span></span>
+            </div>
+        }
+    </div>
+}
+
+@if (blindSpots.Count > 0)
+{
+    <h3 class="header" style="font-size:.95rem">Hiç bakmadığın ve bozuk çıkan parçalar</h3>
+    <div class="stack">
+        @foreach (var p in blindSpots)
+        {
+            <div class="row">
+                <span>@p.Def.Name</span>
+                <span class="faint">hiç bakmadın · <span style="color:var(--red)">gerçek @p.Condition.ToString("F0")</span></span>
+            </div>
+        }
+    </div>
+}
+
+@if (missed.Count > 0)
+{
+    <h3 class="header" style="font-size:.95rem">Bulamadığın @missed.Count kusur vardı</h3>
+    <div class="stack">
+        @foreach (var d in missed.Take(6))
+        {
+            string how = d.SurfacesAfterKm > 0
+                ? "bulunamazdı — zaman bombasıydı"
+                : "bulunurdu: " + string.Join(", ", d.RevealedBy.Select(m => MethodCatalog.Get(m).Name));
+            <div>
+                <div><span style="color:var(--red)">- </span><b>@v.Part(d.PartId).Def.Name</b>: <span class="subtle">@d.Description</span></div>
+                <div class="faint">@how</div>
+            </div>
+        }
+    </div>
+}
+
+<hr class="rule" />
+<p style="color:@(profit >= 0 ? "var(--green)" : "var(--darkyellow)")">
+    @(profit >= 0 ? "Kâr ettin. Ama ne kadarı beceri, ne kadarı şanstı?" : "Zarar ettin. Yukarıdaki listeye bak — hangisini önleyebilirdin?")
+</p>
+<div class="row"><span class="label">Kâr/zarar</span><span class="@(profit >= 0 ? "c-text-green" : "c-text-red")">@UiFormat.Money(profit)</span></div>
+
+<button class="btn primary" @onclick="OnDone">Devam</button>
+
+@code {
+    [Parameter, EditorRequired] public EventCallback OnDone { get; set; }
+}
